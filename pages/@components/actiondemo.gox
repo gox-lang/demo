@@ -1,0 +1,283 @@
+module actiondemo
+
+import (
+	editor "@components/editor.gox"
+	fmt "fmt"
+	gox "github.com/gox-lang/gox"
+	strings "strings"
+)
+
+type Profile struct {
+	Name string
+	Role string
+}
+
+const dataSource = `func FindProfile(name string) gox.Action {
+    return Profile{
+        Name: name,
+        Role: "Building with GOX",
+    }
+}`
+
+const dataCall = `import Actions from "@gox/actions"
+
+const [profile, err] = await Actions.FindProfile("George")
+if (err) throw new Error(err.message)
+console.log(profile)`
+
+const htmlSource = `func WelcomeHTML() gox.Action {
+    return <article class="note-receipt">
+        <span class="eyebrow">HTML FROM GO</span>
+        <h3>Your idea starts here.</h3>
+        <p>This template arrived as a browser element.</p>
+    </article>
+}`
+
+const htmlCall = `import Actions from "@gox/actions"
+
+const [html, err] = await Actions.WelcomeHTML()
+if (err) throw new Error(err.message)
+result.replaceChildren(html)`
+
+const componentSource = `func LoadCard(name string) gox.Action {
+    return <&ProfileCard name={{ name }} />
+}`
+
+const componentCall = `import Actions from "@gox/actions"
+
+const [card, err] = await Actions.LoadCard("George")
+if (err) throw new Error(err.message)
+result.replaceChildren(card)`
+
+func FindProfile(name string) gox.Action {
+	name = strings.TrimSpace(name)
+	if name == "" || len([]rune(name)) > 60 {
+		return fmt.Errorf("Enter a name between 1 and 60 characters.")
+	}
+	return Profile{Name: name, Role: "Building with GOX"}
+}
+
+func WelcomeHTML() gox.Action {
+	return <article class="note-receipt">
+		<span class="eyebrow">HTML FROM GO</span>
+		<h3>Your idea starts here.</h3>
+		<p>This template arrived as a browser element.</p>
+	</article>
+}
+
+func ProfileCard(name string) gox.Component {
+	return <article class="note-receipt">
+		<div class="avatar">G</div>
+		<h3>{{ name }}</h3>
+		<p>A reusable component, rendered on the server.</p>
+	</article>
+}
+
+func LoadCard(name string) gox.Action {
+	return <&ProfileCard name={{ name }} />
+}
+
+func Showcase() gox.Component {
+	return <section class="wrap demo-section" id="actions">
+		<div class="section-heading">
+			<div>
+				<span class="eyebrow">02 / ACTIONS</span>
+				<h2>A function in Go.<br />A call from the browser.</h2>
+			</div>
+			<p>Data, HTML, or components. Choose what to return and try the result.</p>
+		</div>
+		<div class="lab demo-panel">
+			<div class="framework-strip" role="tablist" aria-label="Actions">
+				<button
+					type="button"
+					role="tab"
+					id="action-tab-data"
+					aria-controls="action-panel-data"
+					aria-selected="true"
+					tabindex="0"
+					class="framework-active"
+					data-action-tab
+				>Data</button>
+				<button
+					type="button"
+					role="tab"
+					id="action-tab-html"
+					aria-controls="action-panel-html"
+					aria-selected="false"
+					tabindex="-1"
+					class=""
+					data-action-tab
+				>HTML</button>
+				<button
+					type="button"
+					role="tab"
+					id="action-tab-component"
+					aria-controls="action-panel-component"
+					aria-selected="false"
+					tabindex="-1"
+					class=""
+					data-action-tab
+				>Component</button>
+			</div>
+			<div role="tabpanel" id="action-panel-data" aria-labelledby="action-tab-data">
+				<div class="http-example-grid">
+					<div class="http-source">
+						<div class="pane-heading">
+							<span>GOX · FindProfile · excerpt</span>
+							<button
+								type="button"
+								class="copy-button"
+								data-copy-target="action-code-data"
+							>Copy code</button>
+						</div>
+						<pre class="framework-code">
+							<&editor.Code
+								source={{ dataSource }}
+								id="action-code-data"
+								padding={{ 1 }}
+							/>
+						</pre>
+						<div class="pane-heading">
+							<span>JavaScript · @gox/actions</span>
+							<button
+								type="button"
+								class="copy-button"
+								data-copy-target="action-call-data"
+							>Copy code</button>
+						</div>
+						<pre class="framework-code">
+							<&editor.JavaScript
+								source={{ dataCall }}
+								id="action-call-data"
+								padding={{ 1 }}
+							/>
+						</pre>
+					</div>
+					<div class="http-playground">
+						<span class="eyebrow">TRY IT YOURSELF</span>
+						<h3>An object, ready to use.</h3>
+						<p>Send a name and receive an object created in Go.</p>
+						<form data-action-form="FindProfile" id="action-form-data">
+							<label for="action-name-data">Your name</label>
+							<input
+								id="action-name-data"
+								name="name"
+								value="George"
+								maxlength="60"
+								required
+							/>
+							<button class="button primary" type="submit">Run Action →</button>
+						</form>
+						<p class="http-status" role="status">Ready to run.</p>
+						<div class="http-result" data-action-result aria-live="polite">The result will appear here.</div>
+					</div>
+				</div>
+			</div>
+			<div role="tabpanel" id="action-panel-html" aria-labelledby="action-tab-html" hidden>
+				<div class="http-example-grid">
+					<div class="http-source">
+						<div class="pane-heading">
+							<span>GOX · WelcomeHTML</span>
+							<button
+								type="button"
+								class="copy-button"
+								data-copy-target="action-code-html"
+							>Copy code</button>
+						</div>
+						<pre class="framework-code">
+							<&editor.Code
+								source={{ htmlSource }}
+								id="action-code-html"
+								padding={{ 1 }}
+							/>
+						</pre>
+						<div class="pane-heading">
+							<span>JavaScript · @gox/actions</span>
+							<button
+								type="button"
+								class="copy-button"
+								data-copy-target="action-call-html"
+							>Copy code</button>
+						</div>
+						<pre class="framework-code">
+							<&editor.JavaScript
+								source={{ htmlCall }}
+								id="action-call-html"
+								padding={{ 1 }}
+							/>
+						</pre>
+					</div>
+					<div class="http-playground">
+						<span class="eyebrow">TRY IT YOURSELF</span>
+						<h3>HTML from the server.</h3>
+						<p>The Action returns an HTML element you can insert into the page.</p>
+						<form data-action-form="WelcomeHTML" id="action-form-html">
+							<button class="button primary" type="submit">Run Action →</button>
+						</form>
+						<p class="http-status" role="status">Ready to run.</p>
+						<div class="http-result" data-action-result aria-live="polite">The result will appear here.</div>
+					</div>
+				</div>
+			</div>
+			<div
+				role="tabpanel"
+				id="action-panel-component"
+				aria-labelledby="action-tab-component"
+				hidden
+			>
+				<div class="http-example-grid">
+					<div class="http-source">
+						<div class="pane-heading">
+							<span>GOX · LoadCard · excerpt</span>
+							<button
+								type="button"
+								class="copy-button"
+								data-copy-target="action-code-component"
+							>Copy code</button>
+						</div>
+						<pre class="framework-code">
+							<&editor.Code
+								source={{ componentSource }}
+								id="action-code-component"
+								padding={{ 1 }}
+							/>
+						</pre>
+						<div class="pane-heading">
+							<span>JavaScript · @gox/actions</span>
+							<button
+								type="button"
+								class="copy-button"
+								data-copy-target="action-call-component"
+							>Copy code</button>
+						</div>
+						<pre class="framework-code">
+							<&editor.JavaScript
+								source={{ componentCall }}
+								id="action-call-component"
+								padding={{ 1 }}
+							/>
+						</pre>
+					</div>
+					<div class="http-playground">
+						<span class="eyebrow">TRY IT YOURSELF</span>
+						<h3>Build once. Reuse.</h3>
+						<p>Return a GOX component from an Action and use it in the browser.</p>
+						<form data-action-form="LoadCard" id="action-form-component">
+							<label for="action-name-component">Your name</label>
+							<input
+								id="action-name-component"
+								name="name"
+								value="George"
+								maxlength="60"
+								required
+							/>
+							<button class="button primary" type="submit">Run Action →</button>
+						</form>
+						<p class="http-status" role="status">Ready to run.</p>
+						<div class="http-result" data-action-result aria-live="polite">The result will appear here.</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+}

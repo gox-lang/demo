@@ -1,0 +1,36 @@
+module websocket
+
+import (
+	time "time"
+
+	server "github.com/gox-lang/gox/server"
+)
+
+var Config = server.WebSocketConfig{
+	Enabled: true,
+
+	HandshakeTimeout: 10 * time.Second,
+
+	MaxMessageSize: 8 << 20, // 8 MiB
+	WriteTimeout:   10 * time.Second,
+
+	Heartbeat: server.WebSocketHeartbeatConfig{
+		PingInterval: 25 * time.Second,
+		PongTimeout:  60 * time.Second,
+	},
+
+	Queue: server.WebSocketQueueConfig{
+		MaxMessages: 256,
+		MaxBytes:    16 << 20, // 16 MiB
+	},
+
+	Buffers: server.WebSocketBufferConfig{
+		ReadSize:  4096,
+		WriteSize: 4096,
+	},
+
+	Compression: server.WebSocketCompressionConfig{
+		Enabled: false,
+		Level:   1,
+	},
+}

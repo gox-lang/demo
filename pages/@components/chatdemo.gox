@@ -1,0 +1,779 @@
+module chatdemo
+
+import (
+	editor "@components/editor.gox"
+	gox "github.com/gox-lang/gox"
+)
+
+const serverSource = `module websocket
+
+import (
+    fmt "fmt"
+    gox "github.com/gox-lang/gox"
+    strings "strings"
+    sync "sync"
+    time "time"
+    strconv "strconv"
+)
+
+client SocketCounter react {
+    src: "playground/Counter.jsx"
+}
+
+var poll = struct {
+    sync.Mutex
+    Go int
+    React int
+}{}
+
+func PollSnapshot() map[string]int {
+    return map[string]int{"Go": poll.Go, "React": poll.React}
+}
+
+type Delivery struct {
+    Sender string
+    Recipients map[string]bool
+}
+var receipts = struct {
+    sync.Mutex
+    Next uint64
+    Order []string
+    Messages map[string]Delivery
+}{Messages: make(map[string]Delivery)}
+
+func Index(socket *gox.Socket) gox.WebSocket {
+    socket.On("loadClient", func(name string) gox.EventReply {
+        return <@SocketCounter hydrate="load" adapt="top" name={{ name }} />
+    })
+    socket.On("pollSnapshot", func() {
+        if err := socket.Join("poll"); err != nil {
+            socket.Emit("pollRejected", err.Error())
+            return
+        }
+        poll.Lock()
+        defer poll.Unlock()
+        socket.Emit("pollUpdated", PollSnapshot())
+    })
+    socket.On("castVote", func(choice string) {
+        if choice != "Go" && choice != "React" {
+            socket.Emit("pollRejected", "Choose Go or React.")
+            return
+        }
+        poll.Lock()
+        defer poll.Unlock()
+        if choice == "Go" { poll.Go++ } else { poll.React++ }
+        socket.EmitTo("poll", "pollUpdated", PollSnapshot())
+    })
+
+    socket.On("roundTripFile", func(file gox.File) gox.EventReply {
+        if file.Size() > 1 << 20 {
+            return fmt.Errorf("Choose a file up to 1 MiB.")
+        }
+        return file
+    })
+    socket.On("chatJoin", func() {
+        if err := socket.Join("chat"); err != nil {
+            socket.Emit("chatRejected", err.Error())
+            return
+        }
+        socket.Emit("chatIdentity", socket.ID())
+    })
+    socket.On("chatMessage", func(name string, message string) {
+        name = strings.TrimSpace(name)
+        message = strings.TrimSpace(message)
+        if name == "" || len([]rune(name)) > 40 ||
+            message == "" || len([]rune(message)) > 280 {
+            socket.Emit("chatRejected", "Check the name and message.")
+            return
+        }
+        targets := gox.Groups.Members("chat").All()
+        recipients := make(map[string]bool)
+        for _, target := range targets { recipients[target.ID()] = true }
+        receipts.Lock()
+        receipts.Next++
+        id := strconv.FormatUint(receipts.Next, 10)
+        receipts.Messages[id] = Delivery{Sender: socket.ID(), Recipients: recipients}
+        receipts.Order = append(receipts.Order, id)
+        if len(receipts.Order) > 200 {
+            delete(receipts.Messages, receipts.Order[0])
+            receipts.Order = receipts.Order[1:]
+        }
+        receipts.Unlock()
+        stamp := time.Now().UTC().Format(time.RFC3339)
+        for _, target := range targets {
+            target.Emit("chatMessage", id, socket.ID(), name, message, stamp)
+        }
+    })
+    socket.On("chatReceipt", func(id string, state string) {
+        if state != "received" && state != "seen" { return }
+        receipts.Lock()
+        delivery, exists := receipts.Messages[id]
+        allowed := exists && delivery.Recipients[socket.ID()] && delivery.Sender != socket.ID()
+        receipts.Unlock()
+        if !allowed { return }
+        if sender, ok := gox.Sockets.GetByID(delivery.Sender); ok {
+            sender.Emit("chatReceipt", id, state)
+        }
+    })
+}`
+
+const clientSource = `import { Socket } from "@gox/websocket";
+
+export const socket = new Socket();
+export const socketErrorListeners = new Set();
+const form = document.querySelector("#chat-form");
+const messages = document.querySelector("#chat-messages");
+const status = document.querySelector("#chat-status");
+const feedback = document.querySelector("#chat-feedback");
+const send = form.querySelector("button");
+let pending = false;
+
+function connection(connected, text) {
+    status.textContent = text;
+    status.dataset.connected = String(connected);
+    send.disabled = !connected || pending;
+}
+socket.when("connect", reconnected => {
+    socket.emit("chatJoin");
+    connection(true, reconnected ? "Connection restored" : "Connected");
+});
+socket.when("disconnect", details => {
+    connection(false, details.willReconnect ? "Reconnecting…" : "Disconnected");
+});
+socket.when("error", error => {
+    for (const listener of socketErrorListeners) listener(error);
+    if (error.event !== "roundTripFile" && error.event !== "loadClient") {
+        feedback.textContent = error.message || "Could not connect.";
+    }
+});
+socket.on("chatRejected", message => { feedback.textContent = message; });
+let ownID = "";
+const entries = new Map();
+const receiptRanks = { sent: 0, received: 1, seen: 2 };
+const clock = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit" });
+socket.on("chatIdentity", id => { ownID = id; });
+function acknowledge(id, state) {
+    socket.emit("chatReceipt", id, state).catch(error => {
+        feedback.textContent = error.message || "Could not confirm receipt.";
+    });
+}
+function markVisible() {
+    if (document.visibilityState !== "visible" || !document.hasFocus() || socket.state !== "connected" || !messages.getClientRects().length) return;
+    const area = messages.getBoundingClientRect();
+    for (const [id, item] of entries) {
+        if (item.own || item.seen) continue;
+        const rect = item.element.getBoundingClientRect();
+        if (rect.top >= Math.max(area.top, 0) && rect.bottom <= Math.min(area.bottom, innerHeight)) {
+            item.seen = true;
+            acknowledge(id, "seen");
+        }
+    }
+}
+function receipt(item, state) {
+    if (receiptRanks[state] < receiptRanks[item.state]) return;
+    item.state = state;
+    item.checks.textContent = state === "sent" ? "✓" : "✓✓";
+    item.checks.dataset.state = state;
+    const label = { sent: "Sent to the server", received: "Received in another tab", seen: "Seen in another tab" }[state];
+    item.checks.title = label;
+    item.checks.setAttribute("aria-label", label);
+}
+socket.on("chatReceipt", (id, state) => {
+    const item = entries.get(id);
+    if (item?.own && state in receiptRanks) receipt(item, state);
+});
+socket.on("chatMessage", (id, sender, name, message, stamp) => {
+    if (entries.has(id)) return;
+    messages.querySelector(".chat-empty")?.remove();
+    const own = sender === ownID;
+    const entry = document.createElement("li");
+    entry.className = own ? "chat-bubble chat-own" : "chat-bubble";
+    const author = document.createElement("strong");
+    const body = document.createElement("p");
+    const meta = document.createElement("div");
+    meta.className = "chat-meta";
+    const time = document.createElement("time");
+    time.dateTime = stamp;
+    time.textContent = clock.format(new Date(stamp));
+    author.textContent = own ? "You" : name;
+    body.textContent = message;
+    meta.append(time);
+    const checks = document.createElement("span");
+    checks.className = "chat-checks";
+    const item = { element: entry, own, checks, state: "sent", seen: false };
+    if (own) { meta.append(checks); receipt(item, "sent"); }
+    entry.append(author, body, meta);
+    entries.set(id, item);
+    messages.append(entry);
+    while (entries.size > 50) {
+        const first = entries.keys().next().value;
+        entries.get(first).element.remove();
+        entries.delete(first);
+    }
+    messages.scrollTop = messages.scrollHeight;
+    if (!own) acknowledge(id, "received");
+    requestAnimationFrame(markVisible);
+});
+messages.addEventListener("scroll", markVisible, { passive: true });
+window.addEventListener("scroll", markVisible, { passive: true });
+window.addEventListener("resize", markVisible);
+window.addEventListener("focus", markVisible);
+document.addEventListener("visibilitychange", markVisible);
+form.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (socket.state !== "connected" || pending) return;
+    const input = form.elements.message;
+    const name = form.elements.name.value.trim();
+    const message = input.value.trim();
+    if (!name || !message) {
+        feedback.textContent = "Check the name and message.";
+        return;
+    }
+    pending = true;
+    send.disabled = true;
+    feedback.textContent = "";
+    try {
+        await socket.emit("chatMessage", name, message);
+        if (input.value.trim() === message) input.value = "";
+    } catch (error) {
+        feedback.textContent = error.message || "Could not send. Try again.";
+    } finally {
+        pending = false;
+        send.disabled = socket.state !== "connected";
+    }
+});
+
+new MutationObserver(markVisible).observe(document.querySelector("#realtime-global"), { attributes: true, attributeFilter: ["hidden"] });`
+
+const channelServer = `module chat
+
+import (
+    gox "github.com/gox-lang/gox"
+    strings "strings"
+    sync "sync"
+    time "time"
+    strconv "strconv"
+)
+
+type Delivery struct {
+    Sender string
+    Recipients map[string]bool
+}
+
+func Chat(channel *gox.Channel) gox.Channel {
+    var mu sync.Mutex
+    var next uint64
+    order := []string{}
+    deliveries := make(map[string]Delivery)
+
+    channel.When("validate", func(socket *gox.Socket) bool {
+        return channel.Key() == "general" || channel.Key() == "ayuda"
+    })
+    channel.On("identity", func(socket *gox.Socket) gox.EventReply {
+        return socket.ID()
+    })
+    channel.On("message", func(socket *gox.Socket, name string, message string) {
+        name = strings.TrimSpace(name)
+        message = strings.TrimSpace(message)
+        if name == "" || len([]rune(name)) > 40 ||
+            message == "" || len([]rune(message)) > 280 {
+            channel.Emit("rejected", socket.ID(), "Check the name and message.")
+            return
+        }
+        recipients := make(map[string]bool)
+        for _, member := range channel.Members().All() {
+            recipients[member.ID()] = true
+        }
+        stamp := time.Now().UTC().Format(time.RFC3339Nano)
+        mu.Lock()
+        next++
+        id := stamp + "-" + strconv.FormatUint(next, 10)
+        deliveries[id] = Delivery{Sender: socket.ID(), Recipients: recipients}
+        order = append(order, id)
+        if len(order) > 200 {
+            delete(deliveries, order[0])
+            order = order[1:]
+        }
+        mu.Unlock()
+        channel.Emit("message", id, socket.ID(), name, message, stamp)
+    })
+    channel.On("receipt", func(socket *gox.Socket, id string, state string) {
+        if state != "received" && state != "seen" { return }
+        mu.Lock()
+        delivery, exists := deliveries[id]
+        allowed := exists && delivery.Recipients[socket.ID()] && delivery.Sender != socket.ID()
+        mu.Unlock()
+        if allowed {
+            channel.Emit("receipt", delivery.Sender, id, state)
+        }
+    })
+}`
+
+const channelClient = `import { socket } from "/chat-demo.js";
+
+const form = document.querySelector("#channel-form");
+const messages = document.querySelector("#channel-messages");
+const status = document.querySelector("#channel-status");
+const feedback = document.querySelector("#channel-feedback");
+const select = document.querySelector("#channel-room");
+const badge = document.querySelector("#channel-id");
+const send = form.querySelector("button");
+const openTab = document.querySelector("#channel-open-tab");
+const entries = new Map();
+const ranks = { sent: 0, received: 1, seen: 2 };
+const clock = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit" });
+let room = null;
+let ownID = "";
+let pending = false;
+
+function connection(connected, text) {
+    status.textContent = text;
+    status.dataset.connected = String(connected);
+    send.disabled = !connected || pending;
+    select.disabled = !connected;
+}
+
+function receipt(item, state) {
+    if (!(state in ranks) || ranks[state] < ranks[item.state]) return;
+    item.state = state;
+    item.checks.textContent = state === "sent" ? "✓" : "✓✓";
+    item.checks.dataset.state = state;
+    const label = { sent: "Sent to the server", received: "Received in this room", seen: "Seen in this room" }[state];
+    item.checks.title = label;
+    item.checks.setAttribute("aria-label", label);
+}
+
+function markVisible() {
+    if (document.visibilityState !== "visible" || !document.hasFocus() ||
+        room?.connectionState !== "connected" || !messages.getClientRects().length) return;
+    const area = messages.getBoundingClientRect();
+    for (const [id, item] of entries) {
+        if (item.own || item.seen) continue;
+        const rect = item.element.getBoundingClientRect();
+        if (rect.top >= Math.max(area.top, 0) && rect.bottom <= Math.min(area.bottom, innerHeight)) {
+            item.seen = true;
+            room.emit("receipt", id, "seen");
+        }
+    }
+}
+
+function joinRoom(key) {
+    if (room?.key === key) return;
+    const changingRoom = room !== null;
+    room?.leave();
+    room = null;
+    ownID = "";
+    pending = false;
+    entries.clear();
+    feedback.textContent = "";
+    if (changingRoom) {
+    const empty = document.createElement("li");
+    empty.className = "chat-empty";
+    empty.textContent = "You are in #" + key + ". Send the first message.";
+    messages.replaceChildren(empty);
+    }
+    badge.textContent = "Chat#" + key;
+    badge.dataset.room = key;
+    openTab.href = "/?room=" + encodeURIComponent(key) + "#realtime";
+    connection(false, "Joining #" + key + "…");
+
+    const current = new socket.Channel("Chat#" + key);
+    room = current;
+    current.when("connected", async () => {
+        if (room !== current) return;
+        const id = await current.emit("identity").await();
+        if (room !== current || current.connectionState !== "connected") return;
+        if (typeof id !== "string") {
+            connection(false, "Could not identify the connection.");
+            return;
+        }
+        ownID = id;
+        connection(true, "Connected to #" + key);
+        markVisible();
+    });
+    current.when("disconnected", () => {
+        if (room === current) {
+            pending = false;
+            connection(false, "Reconnecting to #" + key + "…");
+        }
+    });
+    current.when("rejected", () => {
+        if (room !== current) return;
+        connection(false, "Could not join this room.");
+        select.disabled = false;
+    });
+    current.when("error", error => {
+        if (room !== current) return;
+        pending = false;
+        feedback.textContent = error.message;
+        send.disabled = current.connectionState !== "connected" || !ownID;
+    });
+    current.on("rejected", (target, reason) => {
+        if (room !== current || target !== ownID) return;
+        pending = false;
+        send.disabled = false;
+        feedback.textContent = reason;
+    });
+    current.on("receipt", (target, id, state) => {
+        if (room !== current || target !== ownID) return;
+        const item = entries.get(id);
+        if (item?.own) receipt(item, state);
+    });
+    current.on("message", (id, sender, name, message, stamp) => {
+        if (room !== current || entries.has(id)) return;
+        messages.querySelector(".chat-empty")?.remove();
+        const own = sender === ownID;
+        const entry = document.createElement("li");
+        entry.className = own ? "chat-bubble chat-own" : "chat-bubble";
+        const author = document.createElement("strong");
+        author.textContent = own ? "You" : name;
+        const body = document.createElement("p");
+        body.textContent = message;
+        const meta = document.createElement("div");
+        meta.className = "chat-meta";
+        const time = document.createElement("time");
+        time.dateTime = stamp;
+        time.textContent = clock.format(new Date(stamp));
+        meta.append(time);
+        const checks = document.createElement("span");
+        checks.className = "chat-checks";
+        const item = { element: entry, own, checks, state: "sent", seen: false };
+        if (own) {
+            meta.append(checks);
+            receipt(item, "sent");
+            pending = false;
+            send.disabled = false;
+            if (form.elements.message.value.trim() === message) form.elements.message.value = "";
+        }
+        entry.append(author, body, meta);
+        entries.set(id, item);
+        messages.append(entry);
+        while (entries.size > 50) {
+            const first = entries.keys().next().value;
+            entries.get(first).element.remove();
+            entries.delete(first);
+        }
+        messages.scrollTop = messages.scrollHeight;
+        if (!own) current.emit("receipt", id, "received");
+        requestAnimationFrame(markVisible);
+    });
+}
+
+select.addEventListener("change", () => joinRoom(select.value));
+form.addEventListener("submit", event => {
+    event.preventDefault();
+    if (room?.connectionState !== "connected" || !ownID || pending) return;
+    const name = form.elements.name.value.trim();
+    const message = form.elements.message.value.trim();
+    if (!name || !message) {
+        feedback.textContent = "Check the name and message.";
+        return;
+    }
+    pending = true;
+    send.disabled = true;
+    feedback.textContent = "";
+    room.emit("message", name, message);
+});
+messages.addEventListener("scroll", markVisible, { passive: true });
+window.addEventListener("scroll", markVisible, { passive: true });
+window.addEventListener("resize", markVisible);
+window.addEventListener("focus", markVisible);
+document.addEventListener("visibilitychange", markVisible);
+new MutationObserver(markVisible).observe(document.querySelector("#realtime-channels"), { attributes: true, attributeFilter: ["hidden"] });
+joinRoom(select.value);`
+
+func Showcase(ctx *gox.Context) gox.Component {
+	initialRoom, _ := ctx.Request.Query.Get("room")
+	showChannels := initialRoom == "general" || initialRoom == "ayuda"
+	if !showChannels {
+		initialRoom = "general"
+	}
+	globalPanelClass, channelsPanelClass := "", "server-tab-hidden"
+	if showChannels {
+		globalPanelClass, channelsPanelClass = "server-tab-hidden", ""
+	}
+	globalClass, channelsClass := "framework-active", ""
+	globalTab, channelsTab := 0, -1
+	if showChannels {
+		globalClass, channelsClass = "", "framework-active"
+		globalTab, channelsTab = -1, 0
+	}
+
+	return <section class="wrap demo-section" id="realtime">
+		<div class="section-heading">
+			<div>
+				<span class="eyebrow">06 / REAL TIME</span>
+				<h2>One message.<br />Choose who to share it with.</h2>
+			</div>
+			<p>A global chat or separate rooms with Channels. Open another tab and see who receives each message.</p>
+		</div>
+		<div class="lab demo-panel">
+			<div class="framework-strip" role="tablist" aria-label="Chat scope">
+				<button
+					type="button"
+					role="tab"
+					id="realtime-tab-global"
+					aria-controls="realtime-global"
+					aria-selected={{ !showChannels }}
+					tabindex={{ globalTab }}
+					class={{ globalClass }}
+					data-realtime-tab
+				>Global chat</button>
+				<button
+					type="button"
+					role="tab"
+					id="realtime-tab-channels"
+					aria-controls="realtime-channels"
+					aria-selected={{ showChannels }}
+					tabindex={{ channelsTab }}
+					class={{ channelsClass }}
+					data-realtime-tab
+				>Rooms with Channels</button>
+			</div>
+			<div
+				id="realtime-global"
+				role="tabpanel"
+				aria-labelledby="realtime-tab-global"
+				class={{ globalPanelClass }}
+			>
+				<div class="http-example-grid">
+					<div class="http-source">
+						<div class="framework-strip" role="tablist" aria-label="WebSocket code">
+							<button
+								type="button"
+								role="tab"
+								id="chat-tab-go"
+								aria-controls="chat-code-go"
+								aria-selected="true"
+								tabindex="0"
+								class="framework-active"
+								data-chat-tab
+							>GOX</button>
+							<button
+								type="button"
+								role="tab"
+								id="chat-tab-js"
+								aria-controls="chat-code-js"
+								aria-selected="false"
+								tabindex="-1"
+								data-chat-tab
+							>JavaScript</button>
+						</div>
+						<div role="tabpanel" id="chat-code-go" aria-labelledby="chat-tab-go">
+							<div class="pane-heading">
+								<span>websocket/index.gox</span>
+								<button
+									type="button"
+									class="copy-button"
+									data-copy-target="chat-source-go"
+								>Copy code</button>
+							</div>
+							<pre class="framework-code">
+								<&editor.Code
+									source={{ serverSource }}
+									id="chat-source-go"
+									padding={{ 1 }}
+								/>
+							</pre>
+						</div>
+						<div role="tabpanel" id="chat-code-js" aria-labelledby="chat-tab-js" hidden>
+							<div class="pane-heading">
+								<span>chat-demo.js</span>
+								<button
+									type="button"
+									class="copy-button"
+									data-copy-target="chat-source-js"
+								>Copy code</button>
+							</div>
+							<pre class="framework-code">
+								<&editor.JavaScript
+									source={{ clientSource }}
+									id="chat-source-js"
+									padding={{ 1 }}
+								/>
+							</pre>
+						</div>
+					</div>
+					<div class="http-playground chat-playground">
+						<span class="eyebrow">WEBSOCKET · GLOBAL CHAT</span>
+						<h3>The conversation starts here.</h3>
+						<p>Messages are shared with everyone connected to this demo. They are not stored on the server.</p>
+						<div class="chat-toolbar">
+							<span id="chat-status" role="status" data-connected="false">Connecting…</span>
+							<a class="button subtle" href="/#realtime" target="_blank" rel="noopener">Open another tab ↗</a>
+						</div>
+						<ol
+							id="chat-messages"
+							class="chat-messages"
+							role="log"
+							aria-label="Chat messages"
+							aria-live="polite"
+							aria-relevant="additions"
+						>
+							<li class="chat-empty">Send the first message from this tab.</li>
+						</ol>
+						<p class="chat-legend">✓ Sent · ✓✓ Received · ✓✓ blue: seen in another tab. Receipts represent at least one connected person.</p>
+						<form id="chat-form">
+							<label for="chat-name">Your name</label>
+							<input
+								id="chat-name"
+								name="name"
+								value="George"
+								maxlength="40"
+								required
+								autocomplete="nickname"
+							/>
+							<label for="chat-message">Message</label>
+							<div class="input-row">
+								<input
+									id="chat-message"
+									name="message"
+									placeholder="Hello from this tab…"
+									maxlength="280"
+									required
+									autocomplete="off"
+								/>
+								<button type="submit" class="button primary" disabled>Send →</button>
+							</div>
+						</form>
+						<p id="chat-feedback" class="http-status" role="status"></p>
+					</div>
+				</div>
+			</div>
+			<div
+				id="realtime-channels"
+				role="tabpanel"
+				aria-labelledby="realtime-tab-channels"
+				class={{ channelsPanelClass }}
+			>
+				<div class="http-example-grid">
+					<div class="http-source">
+						<div class="framework-strip" role="tablist" aria-label="Channels code">
+							<button
+								type="button"
+								role="tab"
+								id="channels-tab-go"
+								aria-controls="channels-code-go"
+								aria-selected="true"
+								tabindex="0"
+								class="framework-active"
+								data-channels-code-tab
+							>GOX</button>
+							<button
+								type="button"
+								role="tab"
+								id="channels-tab-js"
+								aria-controls="channels-code-js"
+								aria-selected="false"
+								tabindex="-1"
+								data-channels-code-tab
+							>JavaScript</button>
+						</div>
+						<div id="channels-code-go" role="tabpanel" aria-labelledby="channels-tab-go">
+							<div class="pane-heading">
+								<span>websocket/chat/chat.gox</span>
+								<button
+									type="button"
+									class="copy-button"
+									data-copy-target="channels-source-go"
+								>Copy code</button>
+							</div>
+							<pre class="framework-code">
+								<&editor.Code
+									source={{ channelServer }}
+									id="channels-source-go"
+									padding={{ 1 }}
+								/>
+							</pre>
+						</div>
+						<div
+							id="channels-code-js"
+							role="tabpanel"
+							aria-labelledby="channels-tab-js"
+							hidden
+						>
+							<div class="pane-heading">
+								<span>channels-demo.js</span>
+								<button
+									type="button"
+									class="copy-button"
+									data-copy-target="channels-source-js"
+								>Copy code</button>
+							</div>
+							<pre class="framework-code">
+								<&editor.JavaScript
+									source={{ channelClient }}
+									id="channels-source-js"
+									padding={{ 1 }}
+								/>
+							</pre>
+						</div>
+					</div>
+					<div class="http-playground chat-playground">
+						<span class="eyebrow">WEBSOCKET · CHANNELS</span>
+						<h3>Each room, its own conversation.</h3>
+						<p>Only people in the same room receive your messages. Switching rooms leaves the previous channel. No history is stored.</p>
+						<div class="channel-room-picker">
+							<label for="channel-room">Your room</label>
+							<select id="channel-room" disabled>
+								<option value="general" selected={{ initialRoom == "general" }}>General</option>
+								<option value="ayuda" selected={{ initialRoom == "ayuda" }}>Help</option>
+							</select>
+							<span id="channel-id" class="channel-badge" data-room={{ initialRoom }}>Chat#{{ initialRoom }}</span>
+						</div>
+						<div class="chat-toolbar">
+							<span
+								id="channel-status"
+								class="chat-connection"
+								role="status"
+								data-connected="false"
+							>Connecting…</span>
+							<a
+								id="channel-open-tab"
+								class="button subtle"
+								href={{ "/?room=" + initialRoom + "#realtime" }}
+								target="_blank"
+								rel="noopener"
+							>Open another tab ↗</a>
+						</div>
+						<ol
+							id="channel-messages"
+							class="chat-messages"
+							role="log"
+							aria-label="Messages in the selected room"
+							aria-live="polite"
+							aria-relevant="additions"
+						>
+							<li class="chat-empty">You are in #{{ initialRoom }}. Send the first message.</li>
+						</ol>
+						<p class="chat-legend">✓ Sent · ✓✓ Received · ✓✓ blue: seen in another tab in this room. Receipts represent at least one other person.</p>
+						<form id="channel-form">
+							<label for="channel-name">Your name</label>
+							<input
+								id="channel-name"
+								name="name"
+								value="George"
+								maxlength="40"
+								required
+								autocomplete="nickname"
+							/>
+							<label for="channel-message">Message</label>
+							<div class="input-row">
+								<input
+									id="channel-message"
+									name="message"
+									placeholder="Write to this room…"
+									maxlength="280"
+									required
+									autocomplete="off"
+								/>
+								<button type="submit" class="button primary" disabled>Send →</button>
+							</div>
+						</form>
+						<p id="channel-feedback" class="http-status" role="status"></p>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+}

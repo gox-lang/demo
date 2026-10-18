@@ -1,0 +1,442 @@
+module connected
+
+import (
+	editor "@components/editor.gox"
+	fmt "fmt"
+	gox "github.com/gox-lang/gox"
+	strings "strings"
+)
+
+client ProfileSearch react {
+ src: "playground/ProfileSearch.jsx"
+}
+client LivePoll react {
+ src: "playground/LivePoll.jsx"
+}
+
+const serverSource = `func PreviewProfile(name string, age int, active bool) gox.Action {
+    name = strings.TrimSpace(name)
+    if name == "" || len([]rune(name)) > 60 {
+        return fmt.Errorf("Enter a name between 1 and 60 characters.")
+    }
+    if age < 1 || age > 120 {
+        return fmt.Errorf("Age must be between 1 and 120.")
+    }
+    return map[string]any{
+        "Name": name,
+        "Age": age,
+        "Active": active,
+    }
+}`
+
+const clientSource = `import { useState } from "react";
+import Actions from "@gox/actions";
+
+export default function ProfileSearch() {
+    const [profile, setProfile] = useState(null);
+    const [pending, setPending] = useState(false);
+    const [error, setError] = useState("");
+
+    async function submit(event) {
+        event.preventDefault();
+        const form = event.currentTarget;
+        setPending(true);
+        setError("");
+        setProfile(null);
+        try {
+            const [result, err] = await Actions.PreviewProfile(form);
+            if (err) throw new Error(err.message);
+            setProfile(result);
+        } catch (err) {
+            setError(err.message || "Could not connect.");
+        } finally {
+            setPending(false);
+        }
+    }
+
+    return <div>
+        <form onSubmit={submit}>
+            <label htmlFor="profile-name">Name</label>
+            <input id="profile-name" name="name" type="text" defaultValue="George" maxLength={60} required />
+            <label htmlFor="profile-age">Age</label>
+            <input id="profile-age" name="age" type="number" defaultValue={30} min={1} max={120} required />
+            <label className="profile-checkbox">
+                <input name="active" type="checkbox" defaultChecked />
+                Active profile
+            </label>
+            <button className="button primary" type="submit" disabled={pending}>
+                {pending ? "Sending…" : "Submit form →"}
+            </button>
+        </form>
+        <p className="http-status" role="status">
+            {error || (pending ? "Processing in Go…" : "GOX matches controls by name and converts their values.")}
+        </p>
+        <div className="http-result" aria-live="polite">
+            {profile ? <article>
+                <div className="avatar">G</div>
+                <h3>{profile.Name}</h3>
+                <p>Age: {profile.Age}</p>
+                <p>Active: {profile.Active ? "Yes" : "No"}</p>
+            </article> : "Your profile will appear here."}
+        </div>
+    </div>;
+}`
+
+const socketSource = `import (
+    gox "github.com/gox-lang/gox"
+    sync "sync"
+)
+
+var poll = struct {
+    sync.Mutex
+    Go int
+    React int
+}{}
+
+func PollSnapshot() map[string]int {
+    return map[string]int{"Go": poll.Go, "React": poll.React}
+}
+
+func Index(socket *gox.Socket) gox.WebSocket {
+    socket.On("pollSnapshot", func() {
+        if err := socket.Join("poll"); err != nil {
+            socket.Emit("pollRejected", err.Error())
+            return
+        }
+        poll.Lock()
+        defer poll.Unlock()
+        socket.Emit("pollUpdated", PollSnapshot())
+    })
+    socket.On("castVote", func(choice string) {
+        if choice != "Go" && choice != "React" {
+            socket.Emit("pollRejected", "Choose Go or React.")
+            return
+        }
+        poll.Lock()
+        defer poll.Unlock()
+        if choice == "Go" { poll.Go++ } else { poll.React++ }
+        socket.EmitTo("poll", "pollUpdated", PollSnapshot())
+    })
+
+}`
+
+const pollSource = `import { useEffect, useRef, useState } from "react";
+import { Socket } from "@gox/websocket";
+
+export default function LivePoll() {
+    const socketRef = useRef(null);
+    const [connected, setConnected] = useState(false);
+    const [votes, setVotes] = useState({ Go: 0, React: 0 });
+    const [message, setMessage] = useState("Connecting…");
+
+    useEffect(() => {
+        const socket = new Socket();
+        socketRef.current = socket;
+        socket.when("connect", () => {
+            setConnected(true);
+            setMessage("Connected. Each submission adds one vote.");
+            socket.emit("pollSnapshot");
+        });
+        socket.when("disconnect", () => {
+            setConnected(false);
+            setMessage("Disconnected. Waiting to reconnect…");
+        });
+        socket.when("error", error => setMessage(error.message));
+        socket.on("pollRejected", reason => setMessage(reason));
+        socket.on("pollUpdated", result => setVotes(result));
+        return () => {
+            socketRef.current = null;
+            socket.disconnect();
+        };
+    }, []);
+
+    function submit(event) {
+        event.preventDefault();
+        socketRef.current.emit("castVote", event.currentTarget);
+        setMessage("Vote sent. The server will update the tally.");
+    }
+
+    const total = votes.Go + votes.React;
+    return <div className="live-poll">
+        <form onSubmit={submit}>
+            <label htmlFor="poll-choice">What would you like to explore first?</label>
+            <select id="poll-choice" name="choice" defaultValue="Go">
+                <option value="Go">Go on the server</option>
+                <option value="React">React in the browser</option>
+            </select>
+            <button className="button primary" disabled={!connected}>Submit vote →</button>
+        </form>
+        <p className="http-status" role="status">{message}</p>
+        <div className="poll-results" aria-live="polite">
+            <span className="eyebrow">LIVE RESULTS</span>
+            {["Go", "React"].map(option => {
+                const percent = total ? Math.round(votes[option] * 100 / total) : 0;
+                return <div className="poll-option" key={option}>
+                    <div><strong>{option}</strong><span>{votes[option]} {votes[option] === 1 ? "vote" : "votes"} · {percent}%</span></div>
+                    <progress max="100" value={percent} aria-label={option + ": " + percent + "%"} />
+                </div>;
+            })}
+            <p>{total} {total === 1 ? "vote" : "votes"} in this server session.</p>
+        </div>
+        <a className="button subtle" href="/#connected" target="_blank" rel="noopener">Open another tab ↗</a>
+    </div>;
+}`
+
+func PreviewProfile(name string, age int, active bool) gox.Action {
+	name = strings.TrimSpace(name)
+	if name == "" || len([]rune(name)) > 60 {
+		return fmt.Errorf("Enter a name between 1 and 60 characters.")
+	}
+	if age < 1 || age > 120 {
+		return fmt.Errorf("Age must be between 1 and 120.")
+	}
+	return map[string]any{
+		"Name":   name,
+		"Age":    age,
+		"Active": active,
+	}
+}
+
+func Showcase(ctx *gox.Context) gox.Component {
+	return <section class="wrap demo-section" id="connected">
+		<div class="section-heading">
+			<div>
+				<span class="eyebrow">04 / CONNECT</span>
+				<h2>From component<br />to server.</h2>
+			</div>
+			<p>React controls the interface. Connect its forms to Go through Actions or WebSocket.</p>
+		</div>
+		<div class="lab demo-panel">
+			<div class="framework-strip" role="tablist" aria-label="connection">
+				<button
+					type="button"
+					role="tab"
+					id="connection-tab-actions"
+					aria-controls="connection-actions"
+					aria-selected="true"
+					tabindex="0"
+					class="framework-active"
+					data-connection-tab
+				>Actions</button>
+				<button
+					type="button"
+					role="tab"
+					id="connection-tab-socket"
+					aria-controls="connection-socket"
+					aria-selected="false"
+					tabindex="-1"
+					class=""
+					data-connection-tab
+				>WebSocket</button>
+			</div>
+			<div id="connection-actions" role="tabpanel" aria-labelledby="connection-tab-actions">
+				<div class="http-example-grid">
+					<div class="http-source">
+						<div class="framework-strip" role="tablist" aria-label="connected">
+							<button
+								type="button"
+								role="tab"
+								id="connected-tab-go"
+								aria-controls="connected-go"
+								aria-selected="true"
+								tabindex="0"
+								class="framework-active"
+								data-connected-tab
+							>GOX</button>
+							<button
+								type="button"
+								role="tab"
+								id="connected-tab-react"
+								aria-controls="connected-react"
+								aria-selected="false"
+								tabindex="-1"
+								class=""
+								data-connected-tab
+							>React</button>
+						</div>
+						<div id="connected-go" role="tabpanel" aria-labelledby="connected-tab-go">
+							<div class="pane-heading">
+								<span>Go · server</span>
+								<button
+									type="button"
+									class="copy-button"
+									data-copy-target="connected-go-code"
+								>Copy code</button>
+							</div>
+							<pre class="framework-code">
+								<&editor.Code
+									source={{ serverSource }}
+									id="connected-go-code"
+									padding={{ 1 }}
+								/>
+							</pre>
+						</div>
+						<div
+							id="connected-react"
+							role="tabpanel"
+							aria-labelledby="connected-tab-react"
+							hidden
+						>
+							<div class="pane-heading">
+								<span>React · complete component</span>
+								<button
+									type="button"
+									class="copy-button"
+									data-copy-target="connected-react-code"
+								>Copy code</button>
+							</div>
+							<pre class="framework-code">
+								<&editor.JavaScript
+									source={{ clientSource }}
+									id="connected-react-code"
+									padding={{ 1 }}
+								/>
+							</pre>
+						</div>
+					</div>
+					<div class="http-playground">
+						<span class="eyebrow">REACT + ACTIONS</span>
+						<h3>Your interface, connected.</h3>
+						<p>Send the form directly to the Action. Go receives a name, an age, and a boolean, then returns the profile data.</p>
+						<@ProfileSearch hydrate="load" adapt="top">
+							<div>
+								<form inert>
+									<label for="profile-name">Name</label>
+									<input
+										id="profile-name"
+										name="name"
+										type="text"
+										value="George"
+										maxlength="60"
+										required
+									/>
+									<label for="profile-age">Age</label>
+									<input
+										id="profile-age"
+										name="age"
+										type="number"
+										value="30"
+										min="1"
+										max="120"
+										required
+									/>
+									<label class="profile-checkbox">
+										<input name="active" type="checkbox" checked />
+										Active profile
+									</label>
+									<button class="button primary" type="submit">Submit form →</button>
+								</form>
+								<p class="http-status" role="status">GOX matches controls by name and converts their values.</p>
+								<div class="http-result" aria-live="polite">Your profile will appear here.</div>
+							</div>
+						</@ProfileSearch>
+					</div>
+				</div>
+			</div>
+			<div id="connection-socket" role="tabpanel" aria-labelledby="connection-tab-socket" hidden>
+				<div class="http-example-grid">
+					<div class="http-source">
+						<div class="framework-strip" role="tablist" aria-label="poll">
+							<button
+								type="button"
+								role="tab"
+								id="poll-tab-go"
+								aria-controls="poll-go"
+								aria-selected="true"
+								tabindex="0"
+								class="framework-active"
+								data-poll-tab
+							>GOX</button>
+							<button
+								type="button"
+								role="tab"
+								id="poll-tab-react"
+								aria-controls="poll-react"
+								aria-selected="false"
+								tabindex="-1"
+								class=""
+								data-poll-tab
+							>React</button>
+						</div>
+						<div id="poll-go" role="tabpanel" aria-labelledby="poll-tab-go">
+							<div class="pane-heading">
+								<span>Go · server</span>
+								<button
+									type="button"
+									class="copy-button"
+									data-copy-target="poll-go-code"
+								>Copy code</button>
+							</div>
+							<pre class="framework-code">
+								<&editor.Code
+									source={{ socketSource }}
+									id="poll-go-code"
+									padding={{ 1 }}
+								/>
+							</pre>
+						</div>
+						<div id="poll-react" role="tabpanel" aria-labelledby="poll-tab-react" hidden>
+							<div class="pane-heading">
+								<span>React · complete component</span>
+								<button
+									type="button"
+									class="copy-button"
+									data-copy-target="poll-react-code"
+								>Copy code</button>
+							</div>
+							<pre class="framework-code">
+								<&editor.JavaScript
+									source={{ pollSource }}
+									id="poll-react-code"
+									padding={{ 1 }}
+								/>
+							</pre>
+						</div>
+					</div>
+					<div class="http-playground">
+						<span class="eyebrow">REACT + WEBSOCKET</span>
+						<h3>One choice. Everyone in sync.</h3>
+						<p>React sends the entire form. Go receives choice and shares the tally with every connected tab.</p>
+						<@LivePoll hydrate="load" adapt="top">
+							<div class="live-poll">
+								<form inert>
+									<label for="poll-choice">What would you like to explore first?</label>
+									<select id="poll-choice" name="choice">
+										<option value="Go">Go on the server</option>
+										<option value="React">React in the browser</option>
+									</select>
+									<button class="button primary" disabled>Submit vote →</button>
+								</form>
+								<p class="http-status" role="status">Connecting…</p>
+								<div class="poll-results" aria-live="polite">
+									<span class="eyebrow">LIVE RESULTS</span>
+									<div class="poll-option">
+										<div>
+											<strong>Go</strong>
+											<span>0 votes · 0%</span>
+										</div>
+										<progress max="100" value="0" aria-label="Go: 0%" />
+									</div>
+									<div class="poll-option">
+										<div>
+											<strong>React</strong>
+											<span>0 votes · 0%</span>
+										</div>
+										<progress max="100" value="0" aria-label="React: 0%" />
+									</div>
+									<p>0 votes in this server session.</p>
+								</div>
+								<a
+									class="button subtle"
+									href="/#connected"
+									target="_blank"
+									rel="noopener"
+								>Open another tab ↗</a>
+							</div>
+						</@LivePoll>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+}

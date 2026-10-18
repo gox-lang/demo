@@ -1,0 +1,204 @@
+module catalog
+
+import (
+	json "encoding/json"
+	fmt "fmt"
+	gox "github.com/gox-lang/gox"
+)
+
+client Cart react { src: "playground/Cart.jsx" }
+client Reviews react { src: "playground/Reviews.jsx" }
+
+type Product struct {
+	Slug        string
+	Name        string
+	Description string
+	Symbol      string
+	Story       string
+	Use         string
+	Care        string
+	Price       int
+	Review      string
+}
+
+func Find(slug string) (Product, bool) {
+	products := map[string]Product{
+		"keyboard":   {"keyboard", "Keyboard", "A space to turn your ideas into code.", "⌨", "Where an idea starts to take shape. A keyboard is there for the first lines of a project, meeting notes, and messages worth taking your time to write.", "Place it in front of your screen and keep your arms comfortable. Pair it with a clear desk so you can move from typing to thinking without distractions.", "Remove dust with a soft, dry cloth. Avoid eating over the keys and unplug it before cleaning.", 7900, "I love having a dedicated writing corner. It is my companion at the start of every project."},
+		"headphones": {"headphones", "Headphones", "Your favorite music to help you focus.", "♫", "A soundtrack can change the rhythm of your day. These headphones offer a personal space to enjoy an album, follow a conversation, or focus on what you are creating.", "Keep your favorite playlist handy and choose a comfortable volume. Take breaks between listening sessions to reconnect with your surroundings.", "Store them in a dry place when finished. Clean the surfaces with a soft cloth and avoid bending or straining the connections.", 5900, "I use them to listen to music while drawing. They fit right into my routine."},
+		"lamp":       {"lamp", "Lamp", "A little light for your next big idea.", "☀", "Light is part of your workspace too. A lamp brings clarity for reading, drawing, or revisiting that last idea as evening approaches.", "Place it beside your workspace to light what is in front of you without reflecting on the screen. Leave enough room to move it when you switch tasks.", "Switch it off and let it cool before cleaning. Use a dry cloth and keep the base on a stable surface.", 3900, "It makes my desk feel inviting when I read in the evening."},
+	}
+	product, exists := products[slug]
+	return product, exists
+}
+
+func Card(slug string) gox.Component {
+	product, exists := Find(slug)
+	if !exists {
+		return <a class="product-card" href="/products/missing-product">
+			<span class="product-symbol" aria-hidden="true">?</span>
+			<h3>The missing product</h3>
+			<p>A little surprise: discover what happens when a product does not exist.</p>
+			<span class="product-link">Explore the 404 page →</span>
+		</a>
+	}
+	price := fmt.Sprintf("€%.2f", float64(product.Price)/100)
+	return <a class="product-card" href={{ "/products/" + product.Slug }}>
+		<span class="product-symbol" aria-hidden="true">{{ product.Symbol }}</span>
+		<h3>{{ product.Name }}</h3>
+		<p>{{ product.Description }}</p>
+		<span class="shop-stars" aria-label="Initial rating: 4.5 out of 5">
+			<&Stars count={{ 5 }} />
+			<small>4.5 · 2 demo reviews</small>
+		</span>
+		<strong class="shop-price">{{ price }}</strong>
+		<span class="product-link">View details →</span>
+	</a>
+}
+
+func Shopping(ctx *gox.Context, slug string) gox.Component {
+	product, exists := Find(slug)
+	price := fmt.Sprintf("€%.2f", float64(product.Price)/100)
+	items := map[string]map[string]any{}
+	for _, id := range []string{"keyboard", "headphones", "lamp"} {
+		item, _ := Find(id)
+		items[id] = map[string]any{"name": item.Name, "price": item.Price}
+	}
+	data, _ := json.Marshal(items)
+	return <@Cart hydrate="load" adapt="top" slug={{ slug }} catalog={{ string(data) }}>
+		<div class="shop-purchase">
+			<:if condition={{ exists }}>
+				<strong class="shop-price">{{ price }}</strong>
+				<button class="button primary" type="button" disabled>Add to cart</button>
+			</:if>
+			<details class="shop-cart">
+				<summary>
+					<svg
+						class="shop-cart-icon"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="1.8"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<path d="M3 3h2l2.4 12h11.2l2-8H6" />
+						<circle cx="9" cy="20" r="1" />
+						<circle cx="18" cy="20" r="1" />
+					</svg>
+					Your cart (0)
+				</summary>
+				<p>Your cart is empty.</p>
+			</details>
+			<small>Demo store · no real charges. Your cart is saved in this browser.</small>
+		</div>
+	</@Cart>
+}
+func Comments(ctx *gox.Context, slug string) gox.Component {
+	product, _ := Find(slug)
+	return <@Reviews hydrate="load" adapt="top" slug={{ slug }} seed={{ product.Review }}>
+		<section class="shop-reviews">
+			<h2>What people are saying.</h2>
+			<p class="shop-stars">
+				<&Stars count={{ 5 }} />
+				· 4.5 out of 5 · 2 reviews
+			</p>
+			<p>Sample reviews. Your comments are saved only in this browser.</p>
+			<article>
+				<strong>
+					Lucía ·
+					<&Stars count={{ 5 }} />
+				</strong>
+				<p>{{ product.Review }}</p>
+			</article>
+			<article>
+				<strong>
+					Marcos ·
+					<&Stars count={{ 4 }} />
+				</strong>
+				<p>A lovely addition to my workspace. I would choose it again.</p>
+			</article>
+			<form>
+				<h3>Leave a review</h3>
+				<label>Your name<input name="author" required maxlength="50" /></label>
+				<fieldset class="rating-picker">
+					<legend>Rating</legend>
+					<input type="hidden" name="rating" value="0" />
+					<div class="rating-options">
+						<button
+							type="button"
+							class="rating-star"
+							aria-label="1 star"
+							aria-pressed="false"
+							disabled
+						>★</button>
+						<button
+							type="button"
+							class="rating-star"
+							aria-label="2 stars"
+							aria-pressed="false"
+							disabled
+						>★</button>
+						<button
+							type="button"
+							class="rating-star"
+							aria-label="3 stars"
+							aria-pressed="false"
+							disabled
+						>★</button>
+						<button
+							type="button"
+							class="rating-star"
+							aria-label="4 stars"
+							aria-pressed="false"
+							disabled
+						>★</button>
+						<button
+							type="button"
+							class="rating-star"
+							aria-label="5 stars"
+							aria-pressed="false"
+							disabled
+						>★</button>
+						<button
+							type="button"
+							class="rating-reset"
+							aria-label="Rate zero stars"
+							disabled
+						>0 stars</button>
+					</div>
+					<span class="rating-value">0 out of 5</span>
+				</fieldset>
+				<label>Your comment<textarea name="body" required maxlength="1000"></textarea></label>
+				<button class="button primary" type="submit" disabled>Post review</button>
+			</form>
+		</section>
+	</@Reviews>
+}
+
+func Rating(ctx *gox.Context, slug string) gox.Component {
+	product, _ := Find(slug)
+	return <@Reviews hydrate="load" adapt="top" slug={{ slug }} seed={{ product.Review }} compact={{ true }}>
+		<a class="shop-stars" href="#reviews">
+			<&Stars count={{ 5 }} />
+			<span>4.5 · 2 reviews</span>
+		</a>
+	</@Reviews>
+}
+
+func Stars(count int) gox.Component {
+	classes := []string{"rating-star", "rating-star", "rating-star", "rating-star", "rating-star"}
+	for i := 0; i < 5; i++ {
+		if i < count {
+			classes[i] += " is-filled"
+		}
+	}
+	label := fmt.Sprintf("%d out of 5 stars", count)
+	return <span class="rating-stars" role="img" aria-label={{ label }}>
+		<span class={{ classes[0] }} aria-hidden="true">★</span>
+		<span class={{ classes[1] }} aria-hidden="true">★</span>
+		<span class={{ classes[2] }} aria-hidden="true">★</span>
+		<span class={{ classes[3] }} aria-hidden="true">★</span>
+		<span class={{ classes[4] }} aria-hidden="true">★</span>
+	</span>
+}

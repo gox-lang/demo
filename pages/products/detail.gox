@@ -1,0 +1,93 @@
+module detail
+
+import (
+	catalog "@components/catalog.gox"
+	layout "@components/layout.gox"
+	gox "github.com/gox-lang/gox"
+)
+
+func GET(ctx *gox.Context) gox.Page {
+	slug, _ := ctx.Request.Route.Params.Get("slug")
+	product, exists := catalog.Find(slug)
+	title := product.Name
+	if !exists {
+		ctx.Response.Status.SetCode(404)
+		title = "Product not found"
+	}
+	return <>
+		<!DOCTYPE html>
+		<html lang="en">
+			<head>
+				<meta charset="utf-8" />
+				<meta name="viewport" content="width=device-width, initial-scale=1" />
+				<title>{{ title }} · GOX Demo</title>
+				<link rel="icon" href="/gox.png" />
+				<script src="/theme.js">
+				</script>
+				<link rel="stylesheet" href="/style.css" />
+			</head>
+			<body>
+				<&layout.Shell>
+					<section class="wrap product-page">
+						<nav class="product-breadcrumb" aria-label="Breadcrumb">
+							<a href="/#navigation">Demo</a>
+							<span aria-hidden="true">/</span>
+							<a href="/products">Products</a>
+							<span aria-hidden="true">/</span>
+							<span aria-current="page">{{ title }}</span>
+						</nav>
+						<:if condition={{ exists }}>
+							<article class="product-detail shop-detail">
+								<div class="shop-visual" role="img" aria-label={{ product.Name }}>
+									<span>{{ product.Symbol }}</span>
+								</div>
+								<div class="shop-info">
+									<span class="eyebrow">FOR YOUR SPACE</span>
+									<h1>{{ product.Name }}</h1>
+									<&catalog.Rating ctx={{ ctx }} slug={{ slug }} />
+									<p class="product-intro">{{ product.Description }}</p>
+									<p>{{ product.Story }}</p>
+									<&catalog.Shopping ctx={{ ctx }} slug={{ slug }} />
+									<details>
+										<summary>Use and care</summary>
+										<p>{{ product.Use }}</p>
+										<p>{{ product.Care }}</p>
+									</details>
+								</div>
+							</article>
+							<div id="reviews">
+								<&catalog.Comments ctx={{ ctx }} slug={{ slug }} />
+							</div>
+						</:if>
+						<:if condition={{ !exists }}>
+							<article class="product-detail">
+								<span class="product-symbol" aria-hidden="true">?</span>
+								<span class="eyebrow">404 · PRODUCT NOT FOUND</span>
+								<h1>There is no product here.</h1>
+								<p>We could not find “{{ slug }}”. Choose another product from the catalog.</p>
+								<a class="button primary" href="/products">Explore products →</a>
+								<&catalog.Shopping ctx={{ ctx }} slug="" />
+							</article>
+						</:if>
+						<section class="product-related" aria-label="Related products">
+							<h2>More for your space.</h2>
+							<p>More objects to accompany your work and creativity.</p>
+							<div class="product-grid">
+								<:if condition={{ slug != "keyboard" }}>
+									<&catalog.Card slug="keyboard" />
+								</:if>
+								<:if condition={{ slug != "headphones" }}>
+									<&catalog.Card slug="headphones" />
+								</:if>
+								<:if condition={{ slug != "lamp" }}>
+									<&catalog.Card slug="lamp" />
+								</:if>
+								<&catalog.Card slug="missing-product" />
+							</div>
+						</section>
+					</section>
+				</&layout.Shell>
+			</body>
+		</html>
+	</>
+}

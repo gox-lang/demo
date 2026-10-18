@@ -1,0 +1,41 @@
+module layout
+
+import gox "github.com/gox-lang/gox"
+
+func Shell(children gox.Component) gox.Component {
+	return <>
+		<a class="skip" href="#main">Skip to content</a>
+		<header class="site-header">
+			<nav class="nav wrap" aria-label="Main">
+				<a class="brand" href="/">
+					<img src="/gox.png" alt="" width="34" height="34" />
+					<strong class="gradient-text">GOX</strong>
+					<span class="brand-divider"></span>
+					<span class="brand-note">Demo</span>
+				</a>
+				<div class="nav-links">
+					<a href="/#lab">HTTP</a>
+					<a href="/#actions">Actions</a>
+					<a href="/#frameworks">Frameworks</a>
+					<a href="/#connected">Connect</a>
+					<a href="/#returned-client">From Go</a>
+					<a href="/#realtime">Real time</a>
+					<a href="/#files">Files</a>
+					<a href="/#navigation">Navigation</a>
+				</div>
+				<button class="theme-toggle" type="button" data-theme-toggle aria-label="Change theme">◐ <span data-theme-label>Theme</span></button>
+			</nav>
+		</header>
+		<main id="main">
+			<&children />
+		</main>
+		<footer class="wrap footer">
+			<a class="brand" href="/">
+				<img src="/gox.png" alt="" width="24" height="24" />
+				<strong class="gradient-text">GOX</strong>
+			</a>
+			<span>The power of Go. The freedom to create.</span>
+			<a href="#main">Back to top ↑</a>
+		</footer>
+	</>
+}

@@ -1,0 +1,32 @@
+module indextest
+
+import test "github.com/gox-lang/gox/test"
+
+func IndexTest() {
+	request := test.NewRequest{
+		Method: test.GET,
+		URL:    "/",
+	}
+
+	expected := test.NewResponseExpected{
+		Status: 200,
+		Body:   test.ExpectedBody.Contains("Explore what you can build"),
+	}
+
+	result, match := test.Execute(
+		test.Config{},
+		[]test.ExecutePipeLine{
+			{
+				Request:  request,
+				Expected: expected,
+			},
+		},
+	)
+
+	if !match {
+		test.Fail("Demo index response did not match")
+	}
+
+	test.Explain(result)
+	test.Save(result)
+}

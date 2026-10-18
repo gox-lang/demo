@@ -1,0 +1,54 @@
+module card
+
+import gox "github.com/gox-lang/gox"
+
+func Feature(number string, title string, description string, href string, label string) gox.Component {
+	return <article class="feature">
+		<span class="feature-number">{{ number }}</span>
+		<h3>{{ title }}</h3>
+		<p>{{ description }}</p>
+		<a href={{ href }}>
+			{{ label }}
+			<span aria-hidden="true">↗</span>
+		</a>
+	</article>
+}
+
+func Demo(number string, title string, description string, duplicate bool, example string, children gox.Component) gox.Component {
+	tabIndex := 0
+	if duplicate {
+		tabIndex = -1
+	}
+	return <article
+		class="feature demo-card"
+		data-carousel-copy={{ duplicate }}
+		data-example={{ example }}
+		aria-hidden={{ duplicate }}
+	>
+		<div class="demo-card-summary">
+			<span class="feature-number">{{ number }}</span>
+			<h3>{{ title }}</h3>
+			<p>{{ description }}</p>
+			<button
+				class="button primary demo-expand"
+				tabindex={{ tabIndex }}
+				type="button"
+				aria-expanded="false"
+				aria-controls={{ "demo-content-" + example }}
+			>Expand <span aria-hidden="true">↗</span></button>
+		</div>
+		<:if condition={{ !duplicate }}>
+			<div class="demo-card-content" id={{ "demo-content-" + example }}>
+				<div class="demo-expanded-toolbar">
+					<span>{{ number }}</span>
+					<button
+						type="button"
+						class="button subtle demo-collapse"
+						aria-label={{ "Collapse: " + title }}
+					>Collapse <span aria-hidden="true">↙</span></button>
+				</div>
+				<&children />
+			</div>
+		</:if>
+	</article>
+}

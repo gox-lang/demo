@@ -1,0 +1,122 @@
+module websocket
+
+import (
+	fmt "fmt"
+	gox "github.com/gox-lang/gox"
+	strconv "strconv"
+	strings "strings"
+	sync "sync"
+	time "time"
+)
+
+client SocketCounter react {
+    src: "playground/Counter.jsx"
+}
+
+var poll = struct {
+	sync.Mutex
+	Go    int
+	React int
+}{}
+
+func PollSnapshot() map[string]int {
+	return map[string]int{"Go": poll.Go, "React": poll.React}
+}
+
+type Delivery struct {
+	Sender     string
+	Recipients map[string]bool
+}
+
+var receipts = struct {
+	sync.Mutex
+	Next     uint64
+	Order    []string
+	Messages map[string]Delivery
+}{Messages: make(map[string]Delivery)}
+
+func Index(socket *gox.Socket) gox.WebSocket {
+	socket.On("loadClient", func(name string) gox.EventReply {
+		return <@SocketCounter hydrate="load" adapt="top" name={{ name }} />
+	})
+	socket.On("pollSnapshot", func() {
+		if err := socket.Join("poll"); err != nil {
+			socket.Emit("pollRejected", err.Error())
+			return
+		}
+		poll.Lock()
+		defer poll.Unlock()
+		socket.Emit("pollUpdated", PollSnapshot())
+	})
+	socket.On("castVote", func(choice string) {
+		if choice != "Go" && choice != "React" {
+			socket.Emit("pollRejected", "Choose Go or React.")
+			return
+		}
+		poll.Lock()
+		defer poll.Unlock()
+		if choice == "Go" {
+			poll.Go++
+		} else {
+			poll.React++
+		}
+		socket.EmitTo("poll", "pollUpdated", PollSnapshot())
+	})
+
+	socket.On("roundTripFile", func(file gox.File) gox.EventReply {
+		if file.Size() > 1<<20 {
+			return fmt.Errorf("Choose a file up to 1 MiB.")
+		}
+		return file
+	})
+	socket.On("chatJoin", func() {
+		if err := socket.Join("chat"); err != nil {
+			socket.Emit("chatRejected", err.Error())
+			return
+		}
+		socket.Emit("chatIdentity", socket.ID())
+	})
+	socket.On("chatMessage", func(name string, message string) {
+		name = strings.TrimSpace(name)
+		message = strings.TrimSpace(message)
+		if name == "" || len([]rune(name)) > 40 ||
+			message == "" || len([]rune(message)) > 280 {
+			socket.Emit("chatRejected", "Check the name and message.")
+			return
+		}
+		targets := gox.Groups.Members("chat").All()
+		recipients := make(map[string]bool)
+		for _, target := range targets {
+			recipients[target.ID()] = true
+		}
+		receipts.Lock()
+		receipts.Next++
+		id := strconv.FormatUint(receipts.Next, 10)
+		receipts.Messages[id] = Delivery{Sender: socket.ID(), Recipients: recipients}
+		receipts.Order = append(receipts.Order, id)
+		if len(receipts.Order) > 200 {
+			delete(receipts.Messages, receipts.Order[0])
+			receipts.Order = receipts.Order[1:]
+		}
+		receipts.Unlock()
+		stamp := time.Now().UTC().Format(time.RFC3339)
+		for _, target := range targets {
+			target.Emit("chatMessage", id, socket.ID(), name, message, stamp)
+		}
+	})
+	socket.On("chatReceipt", func(id string, state string) {
+		if state != "received" && state != "seen" {
+			return
+		}
+		receipts.Lock()
+		delivery, exists := receipts.Messages[id]
+		allowed := exists && delivery.Recipients[socket.ID()] && delivery.Sender != socket.ID()
+		receipts.Unlock()
+		if !allowed {
+			return
+		}
+		if sender, ok := gox.Sockets.GetByID(delivery.Sender); ok {
+			sender.Emit("chatReceipt", id, state)
+		}
+	})
+}

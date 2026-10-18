@@ -1,0 +1,325 @@
+module frameworks
+
+import (
+	editor "@components/editor.gox"
+	gox "github.com/gox-lang/gox"
+)
+
+client Counter react {
+ src: "playground/Counter.jsx"
+}
+
+client Greeting preact {
+ src: "playground/Greeting.jsx"
+}
+
+client Tasks solid {
+ src: "playground/Tasks.jsx"
+}
+
+client Filter vue {
+ src: "playground/Filter.vue"
+}
+
+client Palette svelte {
+ src: "playground/Palette.svelte"
+}
+
+const example1 = `client Counter react {
+    src: "playground/Counter.jsx"
+}
+
+<@Counter hydrate="hover" />`
+
+const example2 = `client Greeting preact {
+    src: "playground/Greeting.jsx"
+}
+
+<@Greeting hydrate="hover" />`
+
+const example3 = `client Tasks solid {
+    src: "playground/Tasks.jsx"
+}
+
+<@Tasks hydrate="hover" />`
+
+const example4 = `client Filter vue {
+    src: "playground/Filter.vue"
+}
+
+<@Filter hydrate="hover" />`
+
+const example5 = `client Palette svelte {
+    src: "playground/Palette.svelte"
+}
+
+<@Palette hydrate="hover" />`
+
+func Showcase(ctx *gox.Context) gox.Component {
+	return <section class="wrap framework-section" id="frameworks">
+		<div class="section-heading">
+			<div>
+				<span class="eyebrow">YOUR INTERFACE, YOUR TOOLS</span>
+				<h2>Go on the server.<br />Your framework in the browser.</h2>
+			</div>
+			<p>Five frameworks. Five ideas to start building.</p>
+		</div>
+		<div class="framework-panel">
+			<div class="framework-strip" role="tablist" aria-label="Examples by framework">
+				<button
+					type="button"
+					role="tab"
+					id="tab-react"
+					aria-controls="panel-react"
+					aria-selected="true"
+					tabindex="0"
+					class="framework-active"
+					data-framework="react"
+				>React</button>
+				<button
+					type="button"
+					role="tab"
+					id="tab-preact"
+					aria-controls="panel-preact"
+					aria-selected="false"
+					tabindex="-1"
+					class=""
+					data-framework="preact"
+				>Preact</button>
+				<button
+					type="button"
+					role="tab"
+					id="tab-solid"
+					aria-controls="panel-solid"
+					aria-selected="false"
+					tabindex="-1"
+					class=""
+					data-framework="solid"
+				>Solid</button>
+				<button
+					type="button"
+					role="tab"
+					id="tab-vue"
+					aria-controls="panel-vue"
+					aria-selected="false"
+					tabindex="-1"
+					class=""
+					data-framework="vue"
+				>Vue</button>
+				<button
+					type="button"
+					role="tab"
+					id="tab-svelte"
+					aria-controls="panel-svelte"
+					aria-selected="false"
+					tabindex="-1"
+					class=""
+					data-framework="svelte"
+				>Svelte</button>
+			</div>
+			<div
+				class="framework-content"
+				role="tabpanel"
+				id="panel-react"
+				aria-labelledby="tab-react"
+				tabindex="0"
+			>
+				<div>
+					<span class="eyebrow">01 / REACT</span>
+					<h3>A little state. Many possibilities.</h3>
+					<p>Add, subtract, and start again. A counter with local state in React.</p>
+					<pre class="framework-code">
+						<&editor.Code source={{ example1 }} id="framework-example1" padding={{ 1 }} />
+					</pre>
+					<p class="source-note">HTML from the server; interaction on hover. State is preserved when switching tabs.</p>
+				</div>
+				<div class="counter-preview">
+					<span class="hydration-hint">Hover to hydrate</span>
+					<@Counter hydrate="hover" name="GOX" adapt="top">
+						<div class="counter demo-widget ssrt-preview">
+							<span class="eyebrow">HELLO, GOX</span>
+							<h3>One click to get started.</h3>
+							<p>Local state. Instant interaction.</p>
+							<strong class="count">0</strong>
+							<div class="counter-actions">
+								<button type="button" class="button subtle">Subtract −1</button>
+								<button type="button" class="button primary">Add +1</button>
+								<button type="button" class="button subtle">Reset</button>
+							</div>
+							<span class="status hydration-status">
+								<span class="status-dot status-dot-pending"></span>
+								This is SSRT
+							</span>
+						</div>
+					</@Counter>
+				</div>
+			</div>
+			<div
+				class="framework-content"
+				role="tabpanel"
+				id="panel-preact"
+				aria-labelledby="tab-preact"
+				tabindex="0"
+				hidden
+			>
+				<div>
+					<span class="eyebrow">02 / PREACT</span>
+					<h3>A greeting that follows you.</h3>
+					<p>Type your name and watch the greeting change with each letter.</p>
+					<pre class="framework-code">
+						<&editor.Code source={{ example2 }} id="framework-example2" padding={{ 1 }} />
+					</pre>
+					<p class="source-note">HTML from the server; interaction on hover. State is preserved when switching tabs.</p>
+				</div>
+				<div class="counter-preview">
+					<span class="hydration-hint">Hover to hydrate</span>
+					<@Greeting hydrate="hover" name="GOX" adapt="top">
+						<div class="counter demo-widget ssrt-preview">
+							<span class="eyebrow">LIVE GREETING</span>
+							<h3>Hello, GOX.</h3>
+							<label>Your name<input value="GOX" maxlength="40" readonly /></label>
+							<p>Every letter changes the greeting.</p>
+							<span class="status hydration-status">
+								<span class="status-dot status-dot-pending"></span>
+								This is SSRT
+							</span>
+						</div>
+					</@Greeting>
+				</div>
+			</div>
+			<div
+				class="framework-content"
+				role="tabpanel"
+				id="panel-solid"
+				aria-labelledby="tab-solid"
+				tabindex="0"
+				hidden
+			>
+				<div>
+					<span class="eyebrow">03 / SOLID</span>
+					<h3>Small steps. Big ideas.</h3>
+					<p>Complete three tasks and track your first adventure with GOX.</p>
+					<pre class="framework-code">
+						<&editor.Code source={{ example3 }} id="framework-example3" padding={{ 1 }} />
+					</pre>
+					<p class="source-note">HTML from the server; interaction on hover. State is preserved when switching tabs.</p>
+				</div>
+				<div class="counter-preview">
+					<span class="hydration-hint">Hover to hydrate</span>
+					<@Tasks hydrate="hover" adapt="top">
+						<div class="counter demo-widget ssrt-preview">
+							<span class="eyebrow">STEP BY STEP</span>
+							<h3>Your first adventure.</h3>
+							<div class="task-list">
+								<label>
+									<input type="checkbox" />
+									<span>Explore GOX</span>
+								</label>
+								<label>
+									<input type="checkbox" />
+									<span>Try a component</span>
+								</label>
+								<label>
+									<input type="checkbox" />
+									<span>Create my project</span>
+								</label>
+							</div>
+							<progress max="3" value="0" aria-label="Completed tasks"></progress>
+							<p>0 of 3 completed</p>
+							<span class="status hydration-status">
+								<span class="status-dot status-dot-pending"></span>
+								This is SSRT
+							</span>
+						</div>
+					</@Tasks>
+				</div>
+			</div>
+			<div
+				class="framework-content"
+				role="tabpanel"
+				id="panel-vue"
+				aria-labelledby="tab-vue"
+				tabindex="0"
+				hidden
+			>
+				<div>
+					<span class="eyebrow">04 / VUE</span>
+					<h3>Find what you need.</h3>
+					<p>Filter a list of technologies as you type. Try a search with no results too.</p>
+					<pre class="framework-code">
+						<&editor.Code source={{ example4 }} id="framework-example4" padding={{ 1 }} />
+					</pre>
+					<p class="source-note">HTML from the server; interaction on hover. State is preserved when switching tabs.</p>
+				</div>
+				<div class="counter-preview">
+					<span class="hydration-hint">Hover to hydrate</span>
+					<@Filter hydrate="hover" adapt="top">
+						<div class="counter demo-widget ssrt-preview">
+							<span class="eyebrow">FIND YOUR TECHNOLOGY</span>
+							<h3>Less noise. More focus.</h3>
+							<label>Search technologies<input placeholder="Try “re”" readonly /></label>
+							<div class="technology-list">
+								<span>Go</span>
+								<span>React</span>
+								<span>Preact</span>
+								<span>Solid</span>
+								<span>Vue</span>
+								<span>Svelte</span>
+							</div>
+							<span class="status hydration-status">
+								<span class="status-dot status-dot-pending"></span>
+								This is SSRT
+							</span>
+						</div>
+					</@Filter>
+				</div>
+			</div>
+			<div
+				class="framework-content"
+				role="tabpanel"
+				id="panel-svelte"
+				aria-labelledby="tab-svelte"
+				tabindex="0"
+				hidden
+			>
+				<div>
+					<span class="eyebrow">05 / SVELTE</span>
+					<h3>Your interface, your way.</h3>
+					<p>Choose a color to transform a card. A small interaction with an instant result.</p>
+					<pre class="framework-code">
+						<&editor.Code source={{ example5 }} id="framework-example5" padding={{ 1 }} />
+					</pre>
+					<p class="source-note">HTML from the server; interaction on hover. State is preserved when switching tabs.</p>
+				</div>
+				<div class="counter-preview">
+					<span class="hydration-hint">Hover to hydrate</span>
+					<@Palette hydrate="hover" adapt="top">
+						<div class="counter demo-widget ssrt-preview">
+							<span class="eyebrow">MAKE IT YOUR COLOR</span>
+							<h3>One idea, three colors.</h3>
+							<div class="color-preview palette-Blue">Blue<small>Built with GOX + Svelte</small></div>
+							<div class="color-options" role="group" aria-label="Card color">
+								<button type="button" aria-pressed="true">
+									<span class="palette-Blue"></span>
+									Blue
+								</button>
+								<button type="button" aria-pressed="false">
+									<span class="palette-Violet"></span>
+									Violet
+								</button>
+								<button type="button" aria-pressed="false">
+									<span class="palette-Green"></span>
+									Green
+								</button>
+							</div>
+							<span class="status hydration-status">
+								<span class="status-dot status-dot-pending"></span>
+								This is SSRT
+							</span>
+						</div>
+					</@Palette>
+				</div>
+			</div>
+		</div>
+	</section>
+}

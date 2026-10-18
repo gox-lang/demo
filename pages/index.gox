@@ -1,0 +1,323 @@
+module index
+
+import (
+	actiondemo "@components/actiondemo.gox"
+	card "@components/card.gox"
+	chatdemo "@components/chatdemo.gox"
+	connected "@components/connected.gox"
+	filesdemo "@components/filesdemo.gox"
+	frameworks "@components/frameworks.gox"
+	httpdemo "@components/httpdemo.gox"
+	layout "@components/layout.gox"
+	navigationdemo "@components/navigationdemo.gox"
+	returnedclient "@components/returnedclient.gox"
+	gox "github.com/gox-lang/gox"
+)
+
+func GET(ctx *gox.Context) gox.Page {
+
+	return <>
+		<!DOCTYPE html>
+		<html lang="en">
+			<head>
+				<meta charset="utf-8" />
+				<meta name="viewport" content="width=device-width, initial-scale=1" />
+				<title>Explore what you can build · GOX Demo</title>
+				<link rel="icon" href="/gox.png" />
+				<script src="/theme.js">
+				</script>
+				<link rel="stylesheet" href="/style.css" />
+				<script type="module" src="/returned-client.js">
+				</script>
+				<script type="module" src="/files-demo.js">
+				</script>
+				<script type="module" src="/channels-demo.js">
+				</script>
+				<script type="module" src="/chat-demo.js">
+				</script>
+				<script type="module" src="/actions-demo.js">
+				</script>
+				<script src="/carousel.js" defer>
+				</script>
+				<script src="/playground.js" defer>
+				</script>
+			</head>
+			<body>
+				<&layout.Shell>
+					<section class="wrap hero">
+						<span class="pill">
+							<span class="status-dot"></span>
+							THE WEB FRAMEWORK FOR GO
+						</span>
+						<h1>One idea. One language.<br /><span class="gradient-text">So much to build.</span></h1>
+						<p>From server to browser, discover GOX in action.<br class="desktop-break" /> Explore the code, try the examples, and make them your own.</p>
+						<div class="hero-actions">
+							<a class="button primary" href="#lab">Try GOX <span aria-hidden="true">↗</span></a>
+							<a class="button subtle" href="#explore">Explore the possibilities <span aria-hidden="true">→</span></a>
+						</div>
+						<div class="hero-caption">
+							<span>Go on the server</span>
+							<i>·</i>
+							<span>HTML when you need it</span>
+							<i>·</i>
+							<span>Your favorite framework</span>
+						</div>
+					</section>
+					<section class="wrap explore" id="explore">
+						<div class="section-heading">
+							<div>
+								<span class="eyebrow">EXPLORE GOX</span>
+								<h2>Small examples.<br />Big possibilities.</h2>
+							</div>
+							<p>An app for learning by building.<br />Start exploring here.</p>
+						</div>
+						<div class="demo-carousel-controls">
+							<span>8 examples to explore</span>
+							<div>
+								<button
+									type="button"
+									data-carousel-prev
+									aria-label="Previous examples"
+									aria-controls="demo-carousel"
+								>←</button>
+								<button
+									type="button"
+									data-carousel-next
+									aria-label="Next examples"
+									aria-controls="demo-carousel"
+								>→</button>
+							</div>
+						</div>
+						<div
+							class="demo-carousel is-circular has-before has-after"
+							id="demo-carousel"
+							role="region"
+							aria-label="GOX examples"
+							aria-roledescription="carousel"
+							tabindex="0"
+						>
+							<&card.Demo
+								number="01 / HTTP"
+								title="From code to page"
+								description="Explore GET, POST, and OPTIONS. Send data and see how a Go handler responds."
+								duplicate={{ true }}
+								example="lab"
+							/>
+							<&card.Demo
+								number="02 / ACTIONS"
+								title="One call. Many possibilities."
+								description="Call a Go function from the browser and receive data, HTML, or components."
+								duplicate={{ true }}
+								example="actions"
+							/>
+							<&card.Demo
+								number="03 / FRAMEWORKS"
+								title="Your interface. Your tools."
+								description="Five frameworks and five interactive examples, with initial HTML and hydration."
+								duplicate={{ true }}
+								example="frameworks"
+							/>
+							<&card.Demo
+								number="04 / CONNECT"
+								title="From component to server."
+								description="Connect React forms and state to Go through Actions or WebSocket."
+								duplicate={{ true }}
+								example="connected"
+							/>
+							<&card.Demo
+								number="05 / COMPONENTS"
+								title="A response that comes alive."
+								description="Receive a Client Component from an Action or WebSocket and interact with it."
+								duplicate={{ true }}
+								example="returned-client"
+							/>
+							<&card.Demo
+								number="06 / REAL TIME"
+								title="A shared conversation."
+								description="Try a chat with read receipts and separate rooms powered by Channels."
+								duplicate={{ true }}
+								example="realtime"
+							/>
+							<&card.Demo
+								number="07 / FILES"
+								title="There and back."
+								description="Send a file through a form and receive it back using Actions or WebSocket."
+								duplicate={{ true }}
+								example="files"
+							/>
+							<&card.Demo
+								number="08 / NAVIGATION"
+								title="Every link, a new destination."
+								description="Explore a catalog with dynamic routes, detail pages, and 404 responses."
+								duplicate={{ true }}
+								example="navigation"
+							/>
+							<&card.Demo
+								number="01 / HTTP"
+								title="From code to page"
+								description="Explore GET, POST, and OPTIONS. Send data and see how a Go handler responds."
+								duplicate={{ false }}
+								example="lab"
+							>
+								<&httpdemo.Showcase />
+							</&card.Demo>
+							<&card.Demo
+								number="02 / ACTIONS"
+								title="One call. Many possibilities."
+								description="Call a Go function from the browser and receive data, HTML, or components."
+								duplicate={{ false }}
+								example="actions"
+							>
+								<&actiondemo.Showcase />
+							</&card.Demo>
+							<&card.Demo
+								number="03 / FRAMEWORKS"
+								title="Your interface. Your tools."
+								description="Five frameworks and five interactive examples, with initial HTML and hydration."
+								duplicate={{ false }}
+								example="frameworks"
+							>
+								<&frameworks.Showcase ctx={{ ctx }} />
+							</&card.Demo>
+							<&card.Demo
+								number="04 / CONNECT"
+								title="From component to server."
+								description="Connect React forms and state to Go through Actions or WebSocket."
+								duplicate={{ false }}
+								example="connected"
+							>
+								<&connected.Showcase ctx={{ ctx }} />
+							</&card.Demo>
+							<&card.Demo
+								number="05 / COMPONENTS"
+								title="A response that comes alive."
+								description="Receive a Client Component from an Action or WebSocket and interact with it."
+								duplicate={{ false }}
+								example="returned-client"
+							>
+								<&returnedclient.Showcase />
+							</&card.Demo>
+							<&card.Demo
+								number="06 / REAL TIME"
+								title="A shared conversation."
+								description="Try a chat with read receipts and separate rooms powered by Channels."
+								duplicate={{ false }}
+								example="realtime"
+							>
+								<&chatdemo.Showcase ctx={{ ctx }} />
+							</&card.Demo>
+							<&card.Demo
+								number="07 / FILES"
+								title="There and back."
+								description="Send a file through a form and receive it back using Actions or WebSocket."
+								duplicate={{ false }}
+								example="files"
+							>
+								<&filesdemo.Showcase />
+							</&card.Demo>
+							<&card.Demo
+								number="08 / NAVIGATION"
+								title="Every link, a new destination."
+								description="Explore a catalog with dynamic routes, detail pages, and 404 responses."
+								duplicate={{ false }}
+								example="navigation"
+							>
+								<&navigationdemo.Showcase />
+							</&card.Demo>
+							<&card.Demo
+								number="01 / HTTP"
+								title="From code to page"
+								description="Explore GET, POST, and OPTIONS. Send data and see how a Go handler responds."
+								duplicate={{ true }}
+								example="lab"
+							/>
+							<&card.Demo
+								number="02 / ACTIONS"
+								title="One call. Many possibilities."
+								description="Call a Go function from the browser and receive data, HTML, or components."
+								duplicate={{ true }}
+								example="actions"
+							/>
+							<&card.Demo
+								number="03 / FRAMEWORKS"
+								title="Your interface. Your tools."
+								description="Five frameworks and five interactive examples, with initial HTML and hydration."
+								duplicate={{ true }}
+								example="frameworks"
+							/>
+							<&card.Demo
+								number="04 / CONNECT"
+								title="From component to server."
+								description="Connect React forms and state to Go through Actions or WebSocket."
+								duplicate={{ true }}
+								example="connected"
+							/>
+							<&card.Demo
+								number="05 / COMPONENTS"
+								title="A response that comes alive."
+								description="Receive a Client Component from an Action or WebSocket and interact with it."
+								duplicate={{ true }}
+								example="returned-client"
+							/>
+							<&card.Demo
+								number="06 / REAL TIME"
+								title="A shared conversation."
+								description="Try a chat with read receipts and separate rooms powered by Channels."
+								duplicate={{ true }}
+								example="realtime"
+							/>
+							<&card.Demo
+								number="07 / FILES"
+								title="There and back."
+								description="Send a file through a form and receive it back using Actions or WebSocket."
+								duplicate={{ true }}
+								example="files"
+							/>
+							<&card.Demo
+								number="08 / NAVIGATION"
+								title="Every link, a new destination."
+								description="Explore a catalog with dynamic routes, detail pages, and 404 responses."
+								duplicate={{ true }}
+								example="navigation"
+							/>
+						</div>
+					</section>
+					<section class="wrap structure" id="structure">
+						<div>
+							<span class="eyebrow">OPEN THE PROJECT. MAKE IT YOURS.</span>
+							<h2>Everything has its place.</h2>
+							<p>Share components across pages using import aliases.</p>
+							<code class="inline-code">
+								<span class="syntax-keyword">import</span>
+								{{ " " }}
+								<span class="syntax-namespace">card</span>
+								{{ " " }}
+								<span class="syntax-string">"@components/card.gox"</span>
+							</code>
+							<p>GOX searches from the current page up through its parent folders to the pages root. This lets you reuse the same import in nested pages.</p>
+							<p>The @components folder is private: its files can be imported but do not create HTTP routes. No extra configuration is needed.</p>
+						</div>
+						<div class="file-list">
+							<div>
+								<code>pages/</code>
+								<span>Routes and handlers</span>
+							</div>
+							<div>
+								<code>pages/@components/</code>
+								<span>Shared private components</span>
+							</div>
+							<div>
+								<code>client/</code>
+								<span>Five frameworks and Actions integration</span>
+							</div>
+							<div>
+								<code>public/</code>
+								<span>Styles and visual identity</span>
+							</div>
+						</div>
+					</section>
+				</&layout.Shell>
+			</body>
+		</html>
+	</>
+}

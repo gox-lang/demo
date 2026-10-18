@@ -1,0 +1,11 @@
+module routes
+
+import (
+	server "github.com/gox-lang/gox/server"
+)
+
+var Config = server.RoutesConfig{
+	Routes: map[string]string{
+		"/products/:slug": "/products/detail",
+	},
+}

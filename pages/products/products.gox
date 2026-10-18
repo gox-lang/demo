@@ -1,0 +1,42 @@
+module products
+
+import (
+	catalog "@components/catalog.gox"
+	layout "@components/layout.gox"
+	gox "github.com/gox-lang/gox"
+)
+
+func GET(ctx *gox.Context) gox.Page {
+	return <>
+		<!DOCTYPE html>
+		<html lang="en">
+			<head>
+				<meta charset="utf-8" />
+				<meta name="viewport" content="width=device-width, initial-scale=1" />
+				<title>Catalog · GOX Demo</title>
+				<link rel="icon" href="/gox.png" />
+				<script src="/theme.js">
+				</script>
+				<link rel="stylesheet" href="/style.css" />
+			</head>
+			<body>
+				<&layout.Shell>
+					<section class="wrap product-page product-catalog">
+						<a class="product-back" href="/#navigation">← Back to the example</a>
+						<span class="eyebrow">NAVIGATION · /products</span>
+						<h1>Three objects.<br /><span class="gradient-text">A route for each one.</span></h1>
+						<p>Small objects that make your creative space your own. Discover how they can help you write, listen, or light up your next idea.</p>
+						<&catalog.Shopping ctx={{ ctx }} slug="" />
+						<div class="product-grid">
+							<&catalog.Card slug="keyboard" />
+							<&catalog.Card slug="headphones" />
+							<&catalog.Card slug="lamp" />
+							<&catalog.Card slug="missing-product" />
+						</div>
+						<a class="product-back" href="/missing-page">Try a missing page →</a>
+					</section>
+				</&layout.Shell>
+			</body>
+		</html>
+	</>
+}

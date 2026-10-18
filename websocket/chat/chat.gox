@@ -1,0 +1,65 @@
+module chat
+
+import (
+	gox "github.com/gox-lang/gox"
+	strconv "strconv"
+	strings "strings"
+	sync "sync"
+	time "time"
+)
+
+type Delivery struct {
+	Sender     string
+	Recipients map[string]bool
+}
+
+func Chat(channel *gox.Channel) gox.Channel {
+	var mu sync.Mutex
+	var next uint64
+	order := []string{}
+	deliveries := make(map[string]Delivery)
+
+	channel.When("validate", func(socket *gox.Socket) bool {
+		return channel.Key() == "general" || channel.Key() == "ayuda"
+	})
+	channel.On("identity", func(socket *gox.Socket) gox.EventReply {
+		return socket.ID()
+	})
+	channel.On("message", func(socket *gox.Socket, name string, message string) {
+		name = strings.TrimSpace(name)
+		message = strings.TrimSpace(message)
+		if name == "" || len([]rune(name)) > 40 ||
+			message == "" || len([]rune(message)) > 280 {
+			channel.Emit("rejected", socket.ID(), "Check the name and message.")
+			return
+		}
+		recipients := make(map[string]bool)
+		for _, member := range channel.Members().All() {
+			recipients[member.ID()] = true
+		}
+		stamp := time.Now().UTC().Format(time.RFC3339Nano)
+		mu.Lock()
+		next++
+		id := stamp + "-" + strconv.FormatUint(next, 10)
+		deliveries[id] = Delivery{Sender: socket.ID(), Recipients: recipients}
+		order = append(order, id)
+		if len(order) > 200 {
+			delete(deliveries, order[0])
+			order = order[1:]
+		}
+		mu.Unlock()
+		channel.Emit("message", id, socket.ID(), name, message+" agregado", stamp)
+	})
+	channel.On("receipt", func(socket *gox.Socket, id string, state string) {
+		if state != "received" && state != "seen" {
+			return
+		}
+		mu.Lock()
+		delivery, exists := deliveries[id]
+		allowed := exists && delivery.Recipients[socket.ID()] && delivery.Sender != socket.ID()
+		mu.Unlock()
+		if allowed {
+			channel.Emit("receipt", delivery.Sender, id, state)
+		}
+	})
+}

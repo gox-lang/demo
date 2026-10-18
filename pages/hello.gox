@@ -1,0 +1,24 @@
+module hello
+
+import (
+	gox "github.com/gox-lang/gox"
+	strings "strings"
+)
+
+func GET(ctx *gox.Context) gox.Page {
+	name, _ := ctx.Request.Query.Get("name")
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = "George"
+	}
+	return <section class="greeting">
+		<div class="avatar">G</div>
+		<span class="eyebrow">SERVER RENDERED</span>
+		<h2>Hello, {{ name }}<span aria-hidden="true">✦</span></h2>
+		<p>This greeting comes from a GET handler written in GOX.</p>
+		<span class="status">
+			<span class="status-dot"></span>
+			Your page is ready.
+		</span>
+	</section>
+}

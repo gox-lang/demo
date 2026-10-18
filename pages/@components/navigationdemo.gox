@@ -1,0 +1,325 @@
+module navigationdemo
+
+import (
+	editor "@components/editor.gox"
+	gox "github.com/gox-lang/gox"
+)
+
+const routesSource = `module routes
+
+import (
+	server "github.com/gox-lang/gox/server"
+)
+
+var Config = server.RoutesConfig{
+	Routes: map[string]string{
+        "/products/:slug": "/products/detail",
+    },
+}`
+
+const listSource = `module products
+
+import (
+    gox "github.com/gox-lang/gox"
+    layout "@components/layout.gox"
+    catalog "@components/catalog.gox"
+)
+
+func GET(ctx *gox.Context) gox.Page {
+    return <>
+        <!DOCTYPE html>
+        <html lang="en">
+            <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>Catalog · GOX Demo</title>
+                <link rel="icon" href="/gox.png" />
+                <script src="/theme.js"></script>
+                <link rel="stylesheet" href="/style.css" />
+            </head>
+            <body>
+                <&layout.Shell>
+                    <section class="wrap product-page">
+                        <a class="product-back" href="/#navigation">← Back to the example</a>
+                        <span class="eyebrow">NAVIGATION · /products</span>
+                        <h1>Three objects.<br /><span class="gradient-text">A route for each one.</span></h1>
+                        <p>Choose a product. Its URL determines what Go renders.</p>
+                        <div class="product-grid">
+                            <&catalog.Card slug="keyboard" />
+                            <&catalog.Card slug="headphones" />
+                            <&catalog.Card slug="lamp" />
+                        </div>
+                        <a class="product-back" href="/products/missing-product">Try a missing product →</a>
+                    </section>
+                </&layout.Shell>
+            </body>
+        </html>
+    </>
+}`
+
+const detailSource = `module detail
+
+import (
+    gox "github.com/gox-lang/gox"
+    layout "@components/layout.gox"
+    catalog "@components/catalog.gox"
+)
+
+func GET(ctx *gox.Context) gox.Page {
+    slug, _ := ctx.Request.Route.Params.Get("slug")
+    product, exists := catalog.Find(slug)
+    title := product.Name
+    if !exists {
+        ctx.Response.Status.SetCode(404)
+        title = "Product not found"
+    }
+    return <>
+        <!DOCTYPE html>
+        <html lang="en">
+            <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>{{ title }} · GOX Demo</title>
+                <link rel="icon" href="/gox.png" />
+                <script src="/theme.js"></script>
+                <link rel="stylesheet" href="/style.css" />
+            </head>
+            <body>
+                <&layout.Shell>
+                    <section class="wrap product-page">
+                        <nav class="product-breadcrumb" aria-label="Breadcrumb">
+                            <a href="/#navigation">Demo</a><span aria-hidden="true">/</span>
+                            <a href="/products">Products</a><span aria-hidden="true">/</span>
+                            <span aria-current="page">{{ slug }}</span>
+                        </nav>
+                        <:if condition={{ exists }}>
+                            <article class="product-detail">
+                                <span class="product-symbol" aria-hidden="true">{{ product.Symbol }}</span>
+                                <span class="eyebrow">200 OK · PRODUCT FOUND</span>
+                                <h1>{{ product.Name }}</h1>
+                                <p>{{ product.Description }}</p>
+                                <div class="product-route"><span>Received parameter</span><code>slug = {{ slug }}</code></div>
+                                <a class="button primary" href="/products">← Back to the catalog</a>
+                            </article>
+                        </:if>
+                        <:if condition={{ !exists }}>
+                            <article class="product-detail">
+                                <span class="product-symbol" aria-hidden="true">?</span>
+                                <span class="eyebrow">404 · PRODUCT NOT FOUND</span>
+                                <h1>There is no product here.</h1>
+                                <p>We could not find “{{ slug }}”. Choose another product from the catalog.</p>
+                                <a class="button primary" href="/products">Explore products →</a>
+                            </article>
+                        </:if>
+                    </section>
+                </&layout.Shell>
+            </body>
+        </html>
+    </>
+}`
+
+const catalogSource = `module catalog
+
+import gox "github.com/gox-lang/gox"
+
+type Product struct {
+    Slug string
+    Name string
+    Description string
+    Symbol string
+}
+
+func Find(slug string) (Product, bool) {
+    products := map[string]Product{
+        "keyboard": {"keyboard", "Keyboard", "A space to turn your ideas into code.", "⌨"},
+        "headphones": {"headphones", "Headphones", "Your favorite music to help you focus.", "♫"},
+        "lamp": {"lamp", "Lamp", "A little light for your next big idea.", "☀"},
+    }
+    product, exists := products[slug]
+    return product, exists
+}
+
+func Card(slug string) gox.Component {
+    product, _ := Find(slug)
+    return <a class="product-card" href={{ "/products/" + product.Slug }}>
+        <span class="product-symbol" aria-hidden="true">{{ product.Symbol }}</span>
+        <h3>{{ product.Name }}</h3>
+        <p>{{ product.Description }}</p>
+        <span class="product-link">View details →</span>
+    </a>
+}`
+
+func Showcase() gox.Component {
+	return <section class="wrap section" id="navigation">
+		<div class="section-heading">
+			<div>
+				<span class="eyebrow">08 / NAVIGATION</span>
+				<h2>Every link.<br />A new destination.</h2>
+			</div>
+			<p>From a catalog to its details. URLs with parameters, pages rendered by Go, and a 404 response when something does not exist.</p>
+		</div>
+		<div class="lab demo-panel">
+			<div class="http-example-grid">
+				<div class="http-source">
+					<div class="framework-strip" role="tablist" aria-label="Navigation code">
+						<button
+							type="button"
+							role="tab"
+							id="navigation-tab-routes"
+							data-navigation-tab
+							aria-controls="navigation-code-routes"
+							aria-selected="true"
+							tabindex="0"
+							class="framework-active"
+						>Routes</button>
+						<button
+							type="button"
+							role="tab"
+							id="navigation-tab-list"
+							data-navigation-tab
+							aria-controls="navigation-code-list"
+							aria-selected="false"
+							tabindex="-1"
+							class=""
+						>Listing</button>
+						<button
+							type="button"
+							role="tab"
+							id="navigation-tab-detail"
+							data-navigation-tab
+							aria-controls="navigation-code-detail"
+							aria-selected="false"
+							tabindex="-1"
+							class=""
+						>Detail and 404</button>
+						<button
+							type="button"
+							role="tab"
+							id="navigation-tab-catalog"
+							data-navigation-tab
+							aria-controls="navigation-code-catalog"
+							aria-selected="false"
+							tabindex="-1"
+							class=""
+						>Data</button>
+					</div>
+					<div
+						role="tabpanel"
+						id="navigation-code-routes"
+						aria-labelledby="navigation-tab-routes"
+					>
+						<div class="pane-heading">
+							<span>app/routes.gox</span>
+							<button
+								type="button"
+								class="copy-button"
+								data-copy-target="navigation-source-routes"
+							>Copy code</button>
+						</div>
+						<pre class="framework-code">
+							<&editor.Code
+								source={{ routesSource }}
+								id="navigation-source-routes"
+								padding={{ 1 }}
+							/>
+						</pre>
+					</div>
+					<div
+						role="tabpanel"
+						id="navigation-code-list"
+						aria-labelledby="navigation-tab-list"
+						hidden
+					>
+						<div class="pane-heading">
+							<span>pages/products/products.gox</span>
+							<button
+								type="button"
+								class="copy-button"
+								data-copy-target="navigation-source-list"
+							>Copy code</button>
+						</div>
+						<pre class="framework-code">
+							<&editor.Code
+								source={{ listSource }}
+								id="navigation-source-list"
+								padding={{ 1 }}
+							/>
+						</pre>
+					</div>
+					<div
+						role="tabpanel"
+						id="navigation-code-detail"
+						aria-labelledby="navigation-tab-detail"
+						hidden
+					>
+						<div class="pane-heading">
+							<span>pages/products/detail.gox</span>
+							<button
+								type="button"
+								class="copy-button"
+								data-copy-target="navigation-source-detail"
+							>Copy code</button>
+						</div>
+						<pre class="framework-code">
+							<&editor.Code
+								source={{ detailSource }}
+								id="navigation-source-detail"
+								padding={{ 1 }}
+							/>
+						</pre>
+					</div>
+					<div
+						role="tabpanel"
+						id="navigation-code-catalog"
+						aria-labelledby="navigation-tab-catalog"
+						hidden
+					>
+						<div class="pane-heading">
+							<span>pages/@components/catalog.gox</span>
+							<button
+								type="button"
+								class="copy-button"
+								data-copy-target="navigation-source-catalog"
+							>Copy code</button>
+						</div>
+						<pre class="framework-code">
+							<&editor.Code
+								source={{ catalogSource }}
+								id="navigation-source-catalog"
+								padding={{ 1 }}
+							/>
+						</pre>
+					</div>
+				</div>
+				<div class="http-playground navigation-preview">
+					<span class="eyebrow">REAL LINKS · HTML FROM GO</span>
+					<h3>Your next stop.</h3>
+					<p>Open the catalog, choose a product, and return using the links or your browser Back button.</p>
+					<div class="navigation-map">
+						<a href="/products">
+							<span>01 · Catalog</span>
+							<strong>Three objects to explore →</strong>
+							<code>/products</code>
+						</a>
+						<a href="/products/keyboard">
+							<span>02 · Dynamic route</span>
+							<strong>Open a product directly →</strong>
+							<code>/products/keyboard</code>
+						</a>
+						<a href="/products/missing-product">
+							<span>03 · Product not found</span>
+							<strong>What if the product does not exist? →</strong>
+							<code>/products/missing-product</code>
+						</a>
+						<a href="/missing-page">
+							<span>04 · 404 page</span>
+							<strong>A route that does not exist →</strong>
+							<code>/missing-page</code>
+						</a>
+					</div>
+					<p class="navigation-note">Each link opens a full page. You can copy its URL, reload it, and share it.</p>
+				</div>
+			</div>
+		</div>
+	</section>
+}

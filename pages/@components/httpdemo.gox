@@ -1,0 +1,210 @@
+module httpdemo
+
+import (
+	editor "@components/editor.gox"
+	gox "github.com/gox-lang/gox"
+)
+
+const postSource = `func POST(ctx *gox.Context) gox.Page {
+    message, _ := ctx.Request.Form.Fields.Get(
+        "message",
+    )
+    message = strings.TrimSpace(message)
+    if message == "" || len([]rune(message)) > 180 {
+        ctx.Response.Status.SetCode(422)
+        return <p>Write a note.</p>
+    }
+    return <article class="note-receipt">
+        <h3>Your idea has arrived.</h3>
+        <p>{{ message }}</p>
+    </article>
+}`
+
+const optionsSource = `func OPTIONS(ctx *gox.Context) gox.Page {
+    ctx.Response.Headers.Set(
+        "Allow", "POST, OPTIONS",
+    )
+    ctx.Response.Status.SetCode(204)
+}`
+
+const source = `func GET(ctx *gox.Context) gox.Page {
+    name, _ := ctx.Request.Query.Get("name")
+    name = strings.TrimSpace(name)
+    if name == "" { name = "George" }
+
+    return <section>
+        <h2>Hello, {{ name }}</h2>
+        <p>Your page is ready.</p>
+    </section>
+}`
+
+func Showcase() gox.Component {
+	return <section class="wrap lab" id="lab" aria-label="HTTP examples">
+		<div class="framework-strip" role="tablist" aria-label="HTTP methods">
+			<button
+				type="button"
+				role="tab"
+				id="http-tab-get"
+				aria-controls="http-panel-get"
+				aria-selected="true"
+				tabindex="0"
+				class="framework-active"
+				data-http-tab="get"
+			>GET</button>
+			<button
+				type="button"
+				role="tab"
+				id="http-tab-post"
+				aria-controls="http-panel-post"
+				aria-selected="false"
+				tabindex="-1"
+				class=""
+				data-http-tab="post"
+			>POST</button>
+			<button
+				type="button"
+				role="tab"
+				id="http-tab-options"
+				aria-controls="http-panel-options"
+				aria-selected="false"
+				tabindex="-1"
+				class=""
+				data-http-tab="options"
+			>OPTIONS</button>
+		</div>
+		<div role="tabpanel" id="http-panel-get" aria-labelledby="http-tab-get" tabindex="0">
+			<div class="http-example-grid">
+				<div class="http-source">
+					<div class="pane-heading">
+						<span>pages/hello.gox · GET</span>
+						<button type="button" class="copy-button" data-copy>Copy code</button>
+					</div>
+					<pre class="framework-code">
+						<&editor.Code source={{ source }} id="sample-code" padding={{ 1 }} />
+					</pre>
+					<div class="code-caption">Read a parameter and return HTML from Go.</div>
+				</div>
+				<div class="http-playground">
+					<span class="eyebrow">TRY IT YOURSELF</span>
+					<h3>Start with a greeting.</h3>
+					<p>Send your name in the URL and receive an HTML page built by GOX.</p>
+					<form id="greeting-form" action="/hello" method="get">
+						<label for="name">What is your name?</label>
+						<div class="input-row">
+							<input
+								id="name"
+								name="name"
+								value="George"
+								maxlength="60"
+								autocomplete="given-name"
+								required
+							/>
+							<button class="button primary" type="submit">Say hello →</button>
+						</div>
+					</form>
+					<div class="browser-preview">
+						<div class="browser-bar">
+							<div class="traffic">
+								<i></i>
+								<i></i>
+								<i></i>
+							</div>
+							<span data-preview-url>/hello?name=George</span>
+						</div>
+						<div id="greeting-result" aria-live="polite">
+							<section class="greeting">
+								<div class="avatar">G</div>
+								<span class="eyebrow">SERVER RENDERED</span>
+								<h2>Hello, George <span aria-hidden="true">✦</span></h2>
+								<p>This greeting comes from a GET handler written in GOX.</p>
+								<span class="status">
+									<span class="status-dot"></span>
+									Your page is ready.
+								</span>
+							</section>
+						</div>
+					</div>
+					<p class="http-status" id="form-status" role="status"></p>
+				</div>
+			</div>
+		</div>
+		<div role="tabpanel" id="http-panel-post" aria-labelledby="http-tab-post" tabindex="0" hidden>
+			<div class="http-example-grid">
+				<div class="http-source">
+					<div class="pane-heading">
+						<span>pages/notes.gox · POST · excerpt</span>
+						<button type="button" class="copy-button" data-copy-target="post-code">Copy code</button>
+					</div>
+					<pre class="framework-code">
+						<&editor.Code source={{ postSource }} id="post-code" padding={{ 1 }} />
+					</pre>
+					<div class="code-caption">Receive a form and return a note as HTML.</div>
+				</div>
+				<div class="http-playground">
+					<span class="eyebrow">TRY IT YOURSELF</span>
+					<h3>What would you like to build?</h3>
+					<p>The note travels in the form body. This example returns it without saving it.</p>
+					<form id="note-form" action="/notes" method="post">
+						<label for="note-message">Your idea</label>
+						<textarea id="note-message" name="message" rows="3" maxlength="180" required>My first app with GOX.</textarea>
+						<button type="submit" class="button primary">Send note →</button>
+					</form>
+					<p id="note-status" class="http-status" role="status">Ready to send.</p>
+					<div id="note-result" class="http-result" aria-live="polite">
+						<span class="eyebrow">HTML RESPONSE</span>
+						<p>Your note will appear here after you send it.</p>
+					</div>
+				</div>
+			</div>
+		</div>
+		<div
+			role="tabpanel"
+			id="http-panel-options"
+			aria-labelledby="http-tab-options"
+			tabindex="0"
+			hidden
+		>
+			<div class="http-example-grid">
+				<div class="http-source">
+					<div class="pane-heading">
+						<span>pages/notes.gox · OPTIONS</span>
+						<button type="button" class="copy-button" data-copy-target="options-code">Copy code</button>
+					</div>
+					<pre class="framework-code">
+						<&editor.Code source={{ optionsSource }} id="options-code" padding={{ 1 }} />
+					</pre>
+					<div class="code-caption">Describe available methods without sending a body.</div>
+				</div>
+				<div class="http-playground">
+					<span class="eyebrow">TRY IT YOURSELF</span>
+					<h3>What can I do here?</h3>
+					<p>OPTIONS queries the available methods. The response contains headers and does not need HTML.</p>
+					<button type="button" id="inspect-options" class="button primary">Query methods →</button>
+					<p id="options-status" class="http-status" role="status">No query has been made yet.</p>
+					<dl class="http-response">
+						<div>
+							<dt>HTTP status</dt>
+							<dd id="options-code-result">—</dd>
+						</div>
+						<div>
+							<dt>Allow</dt>
+							<dd id="options-allow">—</dd>
+						</div>
+						<div>
+							<dt>Response body</dt>
+							<dd id="options-body">—</dd>
+						</div>
+					</dl>
+				</div>
+			</div>
+		</div>
+		<div class="panel-footer">
+			<span class="terminal-prompt">›_</span>
+			<code>gox run</code>
+			<span class="status">
+				<span class="status-dot"></span>
+				Built with GOX, served by GOX.
+			</span>
+		</div>
+	</section>
+}

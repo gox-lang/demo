@@ -1,0 +1,47 @@
+module error
+
+import (
+	layout "@components/layout.gox"
+	gox "github.com/gox-lang/gox"
+)
+
+func Default(ctx *gox.Context) gox.Page {
+
+	return <span>{{ ctx.Error.GetStatusCode() }} - {{ ctx.Error.GetStatusMessage() }}</span>
+}
+
+func Error404(ctx *gox.Context) gox.Page {
+	return <>
+		<!DOCTYPE html>
+		<html lang="en">
+			<head>
+				<meta charset="utf-8" />
+				<meta name="viewport" content="width=device-width, initial-scale=1" />
+				<title>Page not found · GOX Demo</title>
+				<link rel="icon" href="/gox.png" />
+				<script src="/theme.js">
+				</script>
+				<link rel="stylesheet" href="/style.css" />
+			</head>
+			<body>
+				<&layout.Shell>
+					<section class="wrap product-page">
+						<article class="product-detail">
+							<span class="product-symbol" aria-hidden="true">?</span>
+							<span class="eyebrow">404 · PAGE NOT FOUND</span>
+							<h1>This route leads nowhere.</h1>
+							<p>The page you are looking for does not exist or has moved. There is still plenty to explore.</p>
+							<a class="button primary" href="/">Back to home →</a>
+							<a class="product-back" href="/#navigation">← Back to the navigation example</a>
+						</article>
+					</section>
+				</&layout.Shell>
+			</body>
+		</html>
+	</>
+}
+
+func Error500(ctx *gox.Context) gox.Page {
+
+	return <span>{{ ctx.Error.GetStatusCode() }} - {{ ctx.Error.GetStatusMessage() }}</span>
+}

@@ -1,0 +1,285 @@
+module returnedclient
+
+import (
+	editor "@components/editor.gox"
+	gox "github.com/gox-lang/gox"
+)
+
+client ActionCounter react {
+ src: "playground/Counter.jsx"
+}
+
+const actionSource = `client ActionCounter react {
+ src: "playground/Counter.jsx"
+}
+
+func LoadClient(name string) gox.Action {
+	return <@ActionCounter hydrate="load" adapt="top" name={{ name }} />
+}`
+
+const socketSource = `client SocketCounter react {
+    src: "playground/Counter.jsx"
+}
+
+func Index(socket *gox.Socket) gox.WebSocket {
+    socket.On("loadClient", func(name string) gox.EventReply {
+        return <@SocketCounter hydrate="load" adapt="top" name={{ name }} />
+    })
+}`
+
+const clientSource = `import Actions from "@gox/actions";
+import { socket, socketErrorListeners } from "/chat-demo.js";
+
+let socketError = null;
+socketErrorListeners.add(error => {
+    if (error.event === "loadClient") socketError = error;
+});
+for (const form of document.querySelectorAll("[data-return-client]")) {
+    const panel = form.closest(".http-playground");
+    const status = panel.querySelector("[role=status]");
+    const result = panel.querySelector("[data-client-result]");
+    const button = form.querySelector("button");
+    form.addEventListener("submit", async event => {
+        event.preventDefault();
+        button.disabled = true;
+        status.textContent = "Requesting the component from Go…";
+        try {
+            let component;
+            if (form.dataset.returnClient === "actions") {
+                const [value, error] = await Actions.LoadClient(form);
+                if (error) throw new Error(error.message);
+                component = value;
+            } else {
+                if (socket.state !== "connected") throw new Error("Wait for WebSocket to connect.");
+                socketError = null;
+                component = await socket.emit("loadClient", form);
+                if (socketError) throw new Error(socketError.message);
+            }
+            if (!(component instanceof Node)) throw new Error("No component was received.");
+            result.replaceChildren(component);
+            status.textContent = "Component received. Try the counter.";
+        } catch (error) {
+            status.textContent = error.message || "Could not load the component.";
+        } finally {
+            button.disabled = false;
+        }
+    });
+}`
+
+func LoadClient(name string) gox.Action {
+	return <@ActionCounter hydrate="load" adapt="top" name={{ name }} />
+}
+
+func Showcase() gox.Component {
+	return <section class="wrap demo-section" id="returned-client">
+		<div class="section-heading">
+			<div>
+				<span class="eyebrow">05 / COMPONENTS FROM GO</span>
+				<h2>From Go.<br />Ready to interact.</h2>
+			</div>
+			<p>Receive a React component through an Action or WebSocket. Insert it into the page and GOX hydrates it.</p>
+		</div>
+		<div class="lab demo-panel">
+			<div class="framework-strip" role="tablist" aria-label="returned">
+				<button
+					type="button"
+					role="tab"
+					id="returned-tab-actions"
+					aria-controls="returned-actions"
+					aria-selected="true"
+					tabindex="0"
+					class="framework-active"
+					data-returned-tab
+				>Actions</button>
+				<button
+					type="button"
+					role="tab"
+					id="returned-tab-socket"
+					aria-controls="returned-socket"
+					aria-selected="false"
+					tabindex="-1"
+					class=""
+					data-returned-tab
+				>WebSocket</button>
+			</div>
+			<div id="returned-actions" role="tabpanel" aria-labelledby="returned-tab-actions">
+				<div class="http-example-grid">
+					<div class="http-source">
+						<div class="framework-strip" role="tablist" aria-label="returncode-actions">
+							<button
+								type="button"
+								role="tab"
+								id="returncode-actions-tab-go"
+								aria-controls="returncode-actions-go"
+								aria-selected="true"
+								tabindex="0"
+								class="framework-active"
+								data-returncode-actions-tab
+							>GOX</button>
+							<button
+								type="button"
+								role="tab"
+								id="returncode-actions-tab-js"
+								aria-controls="returncode-actions-js"
+								aria-selected="false"
+								tabindex="-1"
+								class=""
+								data-returncode-actions-tab
+							>JavaScript</button>
+						</div>
+						<div
+							id="returncode-actions-go"
+							role="tabpanel"
+							aria-labelledby="returncode-actions-tab-go"
+						>
+							<div class="pane-heading">
+								<span>Server · actions</span>
+								<button
+									type="button"
+									class="copy-button"
+									data-copy-target="returncode-actions-go-code"
+								>Copy code</button>
+							</div>
+							<pre class="framework-code">
+								<&editor.Code
+									source={{ actionSource }}
+									id="returncode-actions-go-code"
+									padding={{ 1 }}
+								/>
+							</pre>
+						</div>
+						<div
+							id="returncode-actions-js"
+							role="tabpanel"
+							aria-labelledby="returncode-actions-tab-js"
+							hidden
+						>
+							<div class="pane-heading">
+								<span>JavaScript · complete example</span>
+								<button
+									type="button"
+									class="copy-button"
+									data-copy-target="returncode-actions-js-code"
+								>Copy code</button>
+							</div>
+							<pre class="framework-code">
+								<&editor.JavaScript
+									source={{ clientSource }}
+									id="returncode-actions-js-code"
+									padding={{ 1 }}
+								/>
+							</pre>
+						</div>
+					</div>
+					<div class="http-playground">
+						<span class="eyebrow">ACTION → REACT</span>
+						<h3>A component that comes alive.</h3>
+						<p>Your name travels in the form. Each response creates a new, independent counter.</p>
+						<form data-return-client="actions">
+							<label for="return-name-actions">Your name</label>
+							<input
+								id="return-name-actions"
+								name="name"
+								value="George"
+								maxlength="60"
+								required
+							/>
+							<button class="button primary" type="submit">Load component →</button>
+						</form>
+						<p class="http-status" role="status">Ready to load.</p>
+						<div class="http-result" data-client-result aria-live="polite">The component will appear here.</div>
+					</div>
+				</div>
+			</div>
+			<div id="returned-socket" role="tabpanel" aria-labelledby="returned-tab-socket" hidden>
+				<div class="http-example-grid">
+					<div class="http-source">
+						<div class="framework-strip" role="tablist" aria-label="returncode-socket">
+							<button
+								type="button"
+								role="tab"
+								id="returncode-socket-tab-go"
+								aria-controls="returncode-socket-go"
+								aria-selected="true"
+								tabindex="0"
+								class="framework-active"
+								data-returncode-socket-tab
+							>GOX</button>
+							<button
+								type="button"
+								role="tab"
+								id="returncode-socket-tab-js"
+								aria-controls="returncode-socket-js"
+								aria-selected="false"
+								tabindex="-1"
+								class=""
+								data-returncode-socket-tab
+							>JavaScript</button>
+						</div>
+						<div
+							id="returncode-socket-go"
+							role="tabpanel"
+							aria-labelledby="returncode-socket-tab-go"
+						>
+							<div class="pane-heading">
+								<span>Server · socket</span>
+								<button
+									type="button"
+									class="copy-button"
+									data-copy-target="returncode-socket-go-code"
+								>Copy code</button>
+							</div>
+							<pre class="framework-code">
+								<&editor.Code
+									source={{ socketSource }}
+									id="returncode-socket-go-code"
+									padding={{ 1 }}
+								/>
+							</pre>
+						</div>
+						<div
+							id="returncode-socket-js"
+							role="tabpanel"
+							aria-labelledby="returncode-socket-tab-js"
+							hidden
+						>
+							<div class="pane-heading">
+								<span>JavaScript · complete example</span>
+								<button
+									type="button"
+									class="copy-button"
+									data-copy-target="returncode-socket-js-code"
+								>Copy code</button>
+							</div>
+							<pre class="framework-code">
+								<&editor.JavaScript
+									source={{ clientSource }}
+									id="returncode-socket-js-code"
+									padding={{ 1 }}
+								/>
+							</pre>
+						</div>
+					</div>
+					<div class="http-playground">
+						<span class="eyebrow">WEBSOCKET → REACT</span>
+						<h3>A component that comes alive.</h3>
+						<p>Your name travels in the form. Each response creates a new, independent counter.</p>
+						<form data-return-client="socket">
+							<label for="return-name-socket">Your name</label>
+							<input
+								id="return-name-socket"
+								name="name"
+								value="George"
+								maxlength="60"
+								required
+							/>
+							<button class="button primary" type="submit">Load component →</button>
+						</form>
+						<p class="http-status" role="status">Ready to load.</p>
+						<div class="http-result" data-client-result aria-live="polite">The component will appear here.</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+}

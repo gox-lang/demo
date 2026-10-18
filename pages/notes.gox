@@ -1,0 +1,26 @@
+module notes
+
+import (
+	gox "github.com/gox-lang/gox"
+	strings "strings"
+)
+
+func POST(ctx *gox.Context) gox.Page {
+	message, _ := ctx.Request.Form.Fields.Get("message")
+	message = strings.TrimSpace(message)
+	if message == "" || len([]rune(message)) > 180 {
+		ctx.Response.Status.SetCode(422)
+		return <p>Write a note between 1 and 180 characters.</p>
+	}
+	return <article class="note-receipt">
+		<span class="eyebrow">NOTE RECEIVED</span>
+		<h3>Your idea has arrived.</h3>
+		<p>{{ message }}</p>
+		<small>GOX received the form and returned this HTML.</small>
+	</article>
+}
+
+func OPTIONS(ctx *gox.Context) gox.Page {
+	ctx.Response.Headers.Set("Allow", "POST, OPTIONS")
+	ctx.Response.Status.SetCode(204)
+}

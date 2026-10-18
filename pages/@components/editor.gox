@@ -1,0 +1,274 @@
+module editor
+
+import (
+	gox "github.com/gox-lang/gox"
+	html "html"
+	regexp "regexp"
+	strconv "strconv"
+	strings "strings"
+	sync "sync"
+)
+
+var tokenPattern *regexp.Regexp = regexp.MustCompile(`//[^\n]*|[0-9]+(?:\.[0-9]+)?|"(?:\\.|[^"\\])*"|</?@?[A-Za-z][\w-]*|[A-Za-z_]\w*|\{\{|\}\}|:=|==|[<>{}()*=.,:/]`)
+
+type token struct {
+	Text  string
+	Class string
+}
+
+func tokenize(line string) []token {
+	var tokens []token
+	cursor := 0
+	inTag := false
+	clientName := false
+	moduleName := false
+	previous := ""
+	qualifier := ""
+	for _, position := range tokenPattern.FindAllStringIndex(line, -1) {
+		start, end := position[0], position[1]
+		if start > cursor {
+			tokens = append(tokens, token{Text: line[cursor:start]})
+		}
+		value := line[start:end]
+		kind := ""
+		rest := strings.TrimSpace(line[end:])
+		switch {
+		case strings.HasPrefix(value, "//"):
+			kind = "comment"
+		case strings.HasPrefix(value, "<") && len(value) > 1:
+			inTag = true
+			prefix := "<"
+			name := value[1:]
+			if strings.HasPrefix(name, "/") {
+				prefix += "/"
+				name = name[1:]
+			}
+			kind = "tag"
+			if strings.HasPrefix(name, "@") {
+				kind = "client"
+			}
+			tokens = append(tokens, token{Text: prefix, Class: "syntax-punctuation"})
+			value = name
+		case value == ">":
+			inTag = false
+			kind = "punctuation"
+		case strings.HasPrefix(value, "\""):
+			kind = "string"
+			if inTag {
+				kind = "attribute-value"
+			}
+		case moduleName:
+			kind = "namespace"
+			moduleName = false
+		case value == "module":
+			kind = "module"
+			moduleName = true
+		case clientName:
+			kind = "client"
+			clientName = false
+		case value == "client":
+			kind = "keyword"
+			clientName = true
+		case value == "exported" || value == "public" || value == "private":
+			kind = "tag"
+		case strings.Contains(" func return if else import type struct var const for range switch case default break continue defer go select chan map interface package fallthrough ", " "+value+" "):
+			kind = "keyword"
+		case value == "true" || value == "false" || value == "nil" || (value[0] >= '0' && value[0] <= '9'):
+			kind = "literal"
+		case strings.Contains(" string bool byte rune int int8 int16 int32 int64 uint uint8 uint16 uint32 uint64 uintptr float32 float64 complex64 complex128 error any ", " "+value+" "):
+			kind = "type"
+		case inTag && strings.HasPrefix(rest, "="):
+			kind = "attribute"
+		case strings.HasPrefix(rest, "("):
+			kind = "function"
+		case value == "sync" || value == "time" || value == "strconv" || value == "fmt" || value == "gox" || value == "strings" || value == "react" || value == "preact" || value == "solid" || value == "vue" || value == "svelte":
+			kind = "namespace"
+		case previous == "." && value[0] >= 'A' && value[0] <= 'Z' && !strings.Contains(" gox sync time strconv fmt ", " "+qualifier+" "):
+			kind = "attribute"
+		case value[0] >= 'A' && value[0] <= 'Z' && (strings.HasPrefix(rest, "string") || strings.HasPrefix(rest, "uint") || strings.HasPrefix(rest, "map[") || strings.HasPrefix(rest, "[]") || strings.HasPrefix(rest, "bool")):
+			kind = "attribute"
+		case value[0] >= 'A' && value[0] <= 'Z':
+			kind = "type"
+		case strings.ContainsAny(value, "{}()*=.,:/<>"):
+			kind = "operator"
+		}
+		class := ""
+		if kind != "" {
+			class = "syntax-" + kind
+		}
+		tokens = append(tokens, token{Text: value, Class: class})
+		cursor = end
+		if value == "." {
+			qualifier = previous
+		}
+		previous = value
+	}
+	if cursor < len(line) {
+		tokens = append(tokens, token{Text: line[cursor:]})
+	}
+	return tokens
+}
+
+// JavaScript examples use a separate lexer so GOX tags keep their own rules.
+var javascriptPattern *regexp.Regexp = regexp.MustCompile("//.*|\"(?:\\\\.|[^\"\\\\])*\"|'(?:\\\\.|[^'\\\\])*'|`[^`]*`|</?[A-Za-z][A-Za-z0-9_.:-]*|/>|[A-Za-z_$][A-Za-z0-9_$-]*|[0-9]+(?:\\.[0-9]+)?|===|!==|=>|==|!=|&&|\\|\\||\\?\\?|\\?\\.|[{}()\\[\\].,;:]|[-+*/%=!<>?&|]")
+
+type jsxState struct {
+	InTag           bool
+	ExpressionDepth int
+}
+
+func tokenizeJavaScript(line string, state *jsxState) []token {
+	var tokens []token
+	cursor := 0
+	previous := ""
+	for _, position := range javascriptPattern.FindAllStringIndex(line, -1) {
+		start, end := position[0], position[1]
+		if start > cursor {
+			tokens = append(tokens, token{Text: line[cursor:start]})
+		}
+		value := line[start:end]
+		rest := strings.TrimSpace(line[end:])
+		kind := ""
+		switch {
+		case strings.HasPrefix(value, "<") && len(value) > 1 && value != "<=":
+			prefix := "<"
+			name := value[1:]
+			if strings.HasPrefix(name, "/") {
+				prefix = "</"
+				name = name[1:]
+			}
+			tokens = append(tokens, token{Text: prefix, Class: "syntax-punctuation"})
+			value = name
+			kind = "tag"
+			state.InTag = true
+			state.ExpressionDepth = 0
+		case state.InTag && state.ExpressionDepth == 0 && (value == ">" || value == "/>"):
+			kind = "punctuation"
+			state.InTag = false
+		case state.InTag && value == "{":
+			state.ExpressionDepth++
+			kind = "operator"
+		case state.InTag && state.ExpressionDepth > 0 && value == "}":
+			state.ExpressionDepth--
+			kind = "operator"
+		case state.InTag && state.ExpressionDepth == 0 && ((value[0] >= 'a' && value[0] <= 'z') || (value[0] >= 'A' && value[0] <= 'Z')):
+			kind = "attribute"
+		case strings.HasPrefix(value, "//"):
+			kind = "comment"
+		case strings.HasPrefix(value, "\"") || strings.HasPrefix(value, "'") || strings.HasPrefix(value, "`"):
+			kind = "string"
+		case strings.Contains(" import from export default const let var async await function return if else try catch finally throw new typeof instanceof for of in while switch case break continue ", " "+value+" "):
+			kind = "keyword"
+		case value == "true" || value == "false" || value == "null" || value == "undefined" || (value[0] >= '0' && value[0] <= '9'):
+			kind = "literal"
+		case value == "Error" || value == "Promise" || value == "Node" || value == "FormData":
+			kind = "type"
+		case strings.HasPrefix(rest, "("):
+			kind = "function"
+		case value == "Actions" || value == "console" || value == "document" || value == "JSON":
+			kind = "namespace"
+		case previous == "." || previous == "?.":
+			kind = "attribute"
+		case strings.ContainsAny(value, "{}()[].,;:"):
+			kind = "punctuation"
+		case strings.ContainsAny(value, "-+*/%=!<>?&|"):
+			kind = "operator"
+		}
+		class := ""
+		if kind != "" {
+			class = "syntax-" + kind
+		}
+		tokens = append(tokens, token{Text: value, Class: class})
+		cursor = end
+		previous = value
+	}
+	if cursor < len(line) {
+		tokens = append(tokens, token{Text: line[cursor:]})
+	}
+	return tokens
+}
+
+// The demo uses fixed examples. Cache their highlighted lines for this module's lifetime.
+// Hot reload creates a new module, so edited examples receive fresh markup.
+type codeKey struct {
+	Language string
+	Source   string
+	Padding  int
+	MinLines int
+}
+
+var highlightedCache *sync.Map = new(sync.Map)
+
+func highlightedLines(source string, padding int, minLines int, language string) string {
+	key := codeKey{Language: language, Source: source, Padding: padding, MinLines: minLines}
+	if cached, ok := highlightedCache.Load(key); ok {
+		return cached.(string)
+	}
+	space := strings.Repeat("\n", padding)
+	lines := strings.Split(space+source+space, "\n")
+	if extra := minLines - len(lines); extra > 0 {
+		before := strings.Repeat("\n", padding+extra/2)
+		after := strings.Repeat("\n", padding+extra-extra/2)
+		lines = strings.Split(before+source+after, "\n")
+	}
+	var output strings.Builder
+	jsx := jsxState{}
+	for index, line := range lines {
+		output.WriteString("<span class=\"code-line\" data-line=\"")
+		output.WriteString(strconv.Itoa(index + 1))
+		output.WriteString("\"><span class=\"code-line-content\">")
+		parts := tokenize(line)
+		if language == "javascript" {
+			parts = tokenizeJavaScript(line, &jsx)
+		}
+		for _, part := range parts {
+			output.WriteString("<span class=\"")
+			output.WriteString(html.EscapeString(part.Class))
+			output.WriteString("\">")
+			output.WriteString(html.EscapeString(part.Text))
+			output.WriteString("</span>")
+		}
+		output.WriteString("</span></span>")
+		if index < len(lines)-1 {
+			output.WriteByte('\n')
+		}
+	}
+	cached, _ := highlightedCache.LoadOrStore(key, output.String())
+	return cached.(string)
+}
+
+func Code(source string, id string, padding int) gox.Component {
+	markup := highlightedLines(source, padding, 0, "gox")
+	return <>
+		<code id={{ id }} class="highlighted-code" data-source={{ source }}>{{< markup >}}</code>
+		<&Filler markup={{ markup }} />
+	</>
+}
+
+func CodeRows(source string, id string, padding int, minLines int) gox.Component {
+	markup := highlightedLines(source, padding, minLines, "gox")
+	return <>
+		<code id={{ id }} class="highlighted-code" data-source={{ source }}>{{< markup >}}</code>
+		<&Filler markup={{ markup }} />
+	</>
+}
+
+func JavaScript(source string, id string, padding int) gox.Component {
+	markup := highlightedLines(source, padding, 0, "javascript")
+	return <>
+		<code id={{ id }} class="highlighted-code" data-source={{ source }}>{{< markup >}}</code>
+		<&Filler markup={{ markup }} />
+	</>
+}
+
+func Filler(markup string) gox.Component {
+	rows := strings.Count(markup, "data-line=")
+	var numbers strings.Builder
+	for line := rows + 1; line <= rows+256; line++ {
+		numbers.WriteString(strconv.Itoa(line))
+		numbers.WriteByte('\n')
+	}
+	return <span class="editor-filler" data-rows={{ rows }} aria-hidden="true">
+		<span class="editor-filler-numbers">{{ numbers.String() }}</span>
+	</span>
+}
